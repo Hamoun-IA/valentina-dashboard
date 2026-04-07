@@ -1,0 +1,348 @@
+/* Valentina Voice Chat — Cyberpunk Glassmorphism */
+:root {
+    --bg-primary: #05060f;
+    --bg-secondary: #0a0b1a;
+    --neon-cyan: #00f0ff;
+    --neon-magenta: #ff00ff;
+    --neon-purple: #bf5af2;
+    --neon-pink: #ff2d78;
+    --text-primary: #e8eaff;
+    --text-secondary: #8b8fa3;
+    --glass-bg: rgba(15, 17, 40, 0.45);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-blur: 20px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Rajdhani', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Animated background */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background:
+        radial-gradient(ellipse at 20% 50%, rgba(0, 240, 255, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(191, 90, 242, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(255, 0, 255, 0.04) 0%, transparent 50%);
+    animation: bgShift 12s ease-in-out infinite alternate;
+    z-index: -1;
+}
+
+@keyframes bgShift {
+    0% { opacity: 0.7; transform: scale(1); }
+    100% { opacity: 1; transform: scale(1.05); }
+}
+
+/* Navigation */
+.navbar {
+    display: flex;
+    align-items: center;
+    padding: 0.8rem 2rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    border-bottom: 1px solid var(--glass-border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.navbar .logo {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 12px rgba(0, 240, 255, 0.5);
+    margin-right: 2rem;
+    text-decoration: none;
+}
+
+.nav-links {
+    display: flex;
+    gap: 1.5rem;
+    list-style: none;
+}
+
+.nav-links a {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    transition: all 0.3s;
+}
+
+.nav-links a:hover {
+    color: var(--neon-cyan);
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+
+.nav-links a.active {
+    color: var(--neon-cyan);
+    background: rgba(0, 240, 255, 0.08);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    border: 1px solid rgba(0, 240, 255, 0.15);
+}
+
+/* Main layout */
+.voice-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem 1rem;
+    max-width: 700px;
+    margin: 0 auto;
+    gap: 1.2rem;
+}
+
+/* Avatar */
+.avatar-wrapper {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid var(--neon-cyan);
+    box-shadow:
+        0 0 20px rgba(0, 240, 255, 0.25),
+        0 0 40px rgba(0, 240, 255, 0.1),
+        inset 0 0 15px rgba(0, 240, 255, 0.1);
+    flex-shrink: 0;
+}
+
+.avatar-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-wrapper::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    background: conic-gradient(from 0deg, var(--neon-cyan), var(--neon-magenta), var(--neon-purple), var(--neon-cyan)) border-box;
+    -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: avatarSpin 6s linear infinite;
+}
+
+@keyframes avatarSpin {
+    to { transform: rotate(360deg); }
+}
+
+/* Status */
+.status-indicator {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    transition: all 0.4s;
+}
+
+.status-indicator.recording {
+    color: var(--neon-pink);
+    text-shadow: 0 0 12px rgba(255, 45, 120, 0.6);
+}
+
+.status-indicator.processing {
+    color: var(--neon-purple);
+    text-shadow: 0 0 12px rgba(191, 90, 242, 0.6);
+    animation: statusPulse 1s ease-in-out infinite;
+}
+
+.status-indicator.playing {
+    color: var(--neon-magenta);
+    text-shadow: 0 0 12px rgba(255, 0, 255, 0.6);
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Equalizer */
+.equalizer-wrapper {
+    width: 100%;
+    max-width: 500px;
+    height: 140px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+}
+
+.equalizer-wrapper canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Record button */
+.record-btn {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 2px solid var(--neon-cyan);
+    background: rgba(0, 240, 255, 0.06);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.record-btn:hover {
+    background: rgba(0, 240, 255, 0.12);
+    box-shadow: 0 0 25px rgba(0, 240, 255, 0.3);
+}
+
+.record-btn svg {
+    width: 28px;
+    height: 28px;
+    fill: var(--neon-cyan);
+    transition: fill 0.3s;
+}
+
+.record-btn.active {
+    border-color: var(--neon-pink);
+    background: rgba(255, 45, 120, 0.1);
+    animation: recordPulse 1.5s ease-in-out infinite;
+}
+
+.record-btn.active svg {
+    fill: var(--neon-pink);
+}
+
+@keyframes recordPulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(255, 45, 120, 0.3); }
+    50% { box-shadow: 0 0 30px rgba(255, 45, 120, 0.6), 0 0 60px rgba(255, 45, 120, 0.2); }
+}
+
+.record-btn::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 240, 255, 0.15);
+    transition: all 0.3s;
+}
+
+.record-btn.active::before {
+    border-color: rgba(255, 45, 120, 0.25);
+    animation: ringPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes ringPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: 0.3; }
+}
+
+/* Chat transcript */
+.chat-area {
+    width: 100%;
+    max-width: 600px;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 240, 255, 0.2) transparent;
+}
+
+.chat-area::-webkit-scrollbar { width: 4px; }
+.chat-area::-webkit-scrollbar-track { background: transparent; }
+.chat-area::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.25); border-radius: 4px; }
+
+.chat-msg {
+    max-width: 80%;
+    padding: 0.6rem 1rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    word-wrap: break-word;
+    animation: msgIn 0.3s ease-out;
+}
+
+@keyframes msgIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-msg.user {
+    align-self: flex-end;
+    background: rgba(0, 240, 255, 0.08);
+    border: 1px solid rgba(0, 240, 255, 0.15);
+    color: var(--neon-cyan);
+    border-bottom-right-radius: 4px;
+}
+
+.chat-msg.valentina {
+    align-self: flex-start;
+    background: rgba(191, 90, 242, 0.08);
+    border: 1px solid rgba(191, 90, 242, 0.15);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
+}
+
+.chat-msg .sender {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 0.2rem;
+    opacity: 0.6;
+}
+
+/* Connection status */
+.connection-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #444;
+    margin-left: auto;
+    transition: background 0.3s;
+}
+
+.connection-dot.connected {
+    background: #0f0;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.5);
+}
+
+.connection-dot.disconnected {
+    background: #f00;
+    box-shadow: 0 0 8px rgba(255, 0, 0, 0.4);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .voice-container { padding: 1rem 0.5rem; }
+    .avatar-wrapper { width: 90px; height: 90px; }
+    .equalizer-wrapper { height: 110px; }
+    .record-btn { width: 64px; height: 64px; }
+    .chat-area { max-height: 250px; }
+    .navbar { padding: 0.6rem 1rem; }
+}

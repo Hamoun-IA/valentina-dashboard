@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valentina — Voice Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/voice.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <a href="/" class="logo">VALENTINA</a>
+        <ul class="nav-links">
+            <li><a href="/">Dashboard</a></li>
+            <li><a href="/voice" class="active">Voice Chat</a></li>
+        </ul>
+        <div id="conn-dot" class="connection-dot disconnected" title="WebSocket"></div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="voice-container">
+        <!-- Avatar -->
+        <div class="avatar-wrapper">
+            <img src="/assets/valentina-profile.jpg" alt="Valentina">
+        </div>
+
+        <!-- Status -->
+        <div id="status" class="status-indicator">Prête</div>
+
+        <!-- Equalizer -->
+        <div class="equalizer-wrapper">
+            <canvas id="eq-canvas"></canvas>
+        </div>
+
+        <!-- Record button -->
+        <button id="record-btn" class="record-btn" aria-label="Enregistrer">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-3.07A7 7 0 0 0 19 11h-2z"/>
+            </svg>
+        </button>
+
+        <!-- Chat transcript -->
+        <div id="chat-area" class="chat-area"></div>
+    </main>
+
+    <script src="/js/voice.js"></script>
+</body>
+</html>

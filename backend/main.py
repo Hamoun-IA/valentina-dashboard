@@ -5,9 +5,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
 import hermes_data as hd
 
+from backend.voice_chat import router as voice_chat_router
+
 app = FastAPI(title="Valentina Dashboard", version="1.0.0")
+app.include_router(voice_chat_router)
 
 # API Routes
 @app.get("/api/overview")
@@ -47,3 +52,7 @@ app.mount("/assets", StaticFiles(directory=str(frontend_dir / "assets")), name="
 @app.get("/")
 def root():
     return FileResponse(str(frontend_dir / "index.html"))
+
+@app.get("/voice")
+def voice():
+    return FileResponse(str(frontend_dir / "voice.html"))
