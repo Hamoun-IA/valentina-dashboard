@@ -23,7 +23,8 @@
     // ── WebSocket ──
     let ws = null;
     let reconnectTimer = null;
-    const WS_URL = `ws://${location.host}/ws/voice-chat`;
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const WS_URL = `${wsProto}//${location.host}/ws/voice-chat`;
 
     // ── Speech recognition ──
     let recognition = null;
