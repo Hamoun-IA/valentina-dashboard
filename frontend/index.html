@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valentina Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="dashboard">
+    <!-- Header -->
+    <header class="header glass animate-in">
+        <div class="header-brand">
+            <div class="header-logo">V</div>
+            <div>
+                <div class="header-title">VALENTINA</div>
+                <div class="header-subtitle">Agent Command Center</div>
+            </div>
+        </div>
+        <div class="header-status">
+            <div class="status-dot"></div>
+            <span>SYSTEMS ONLINE</span>
+        </div>
+    </header>
+
+    <!-- Stats Overview -->
+    <section class="stats-grid">
+        <div class="stat-card glass animate-in delay-1" style="--accent-color: var(--neon-cyan);">
+            <div class="stat-label">Sessions totales</div>
+            <div class="stat-value" id="total-sessions">—</div>
+            <div class="stat-sub" id="today-sessions">aujourd'hui: —</div>
+        </div>
+        <div class="stat-card glass animate-in delay-2" style="--accent-color: var(--neon-magenta);">
+            <div class="stat-label">Messages</div>
+            <div class="stat-value" id="total-messages">—</div>
+            <div class="stat-sub" id="today-messages">aujourd'hui: —</div>
+        </div>
+        <div class="stat-card glass animate-in delay-3" style="--accent-color: var(--neon-green);">
+            <div class="stat-label">Tokens utilisés</div>
+            <div class="stat-value" id="total-tokens">—</div>
+            <div class="stat-sub" id="tokens-breakdown">in: — / out: —</div>
+        </div>
+        <div class="stat-card glass animate-in delay-4" style="--accent-color: var(--neon-orange);">
+            <div class="stat-label">Tool Calls</div>
+            <div class="stat-value" id="total-tools">—</div>
+            <div class="stat-sub" id="cost-estimate">coût estimé: —</div>
+        </div>
+    </section>
+
+    <!-- Providers -->
+    <section class="card glass animate-in delay-3" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <div class="card-title"><span class="icon">⚡</span>PROVIDERS ARSENAL</div>
+        </div>
+        <div class="providers-grid" id="providers-grid">
+            <!-- Filled by JS -->
+        </div>
+    </section>
+
+    <!-- Main Charts Grid -->
+    <div class="main-grid">
+        <!-- Activity Timeline -->
+        <div class="card glass animate-in delay-4">
+            <div class="card-header">
+                <div class="card-title"><span class="icon">📊</span>ACTIVITÉ</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Token Distribution -->
+        <div class="card glass animate-in delay-5">
+            <div class="card-header">
+                <div class="card-title"><span class="icon">🎯</span>MODÈLES</div>
+            </div>
+            <div class="chart-container">
+                <canvas id="modelsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row -->
+    <div class="main-grid">
+        <!-- Tool Usage -->
+        <div class="card glass animate-in delay-4">
+            <div class="card-header">
+                <div class="card-title"><span class="icon">🔧</span>OUTILS LES PLUS UTILISÉS</div>
+            </div>
+            <div id="tools-container">
+                <!-- Filled by JS -->
+            </div>
+        </div>
+
+        <!-- Token by Provider -->
+        <div class="card glass animate-in delay-5">
+            <div class="card-header">
+                <div class="card-title"><span class="icon">💰</span>TOKENS / PROVIDER</div>
+            </div>
+            <div class="chart-container chart-container-sm">
+                <canvas id="providerTokensChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sessions Table -->
+    <section class="card glass animate-in delay-5" style="margin-top: 24px;">
+        <div class="card-header">
+            <div class="card-title"><span class="icon">📋</span>SESSIONS RÉCENTES</div>
+        </div>
+        <div style="overflow-x: auto;">
+            <table class="sessions-table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Modèle</th>
+                        <th>Messages</th>
+                        <th>Tools</th>
+                        <th>Tokens</th>
+                        <th>Démarré</th>
+                    </tr>
+                </thead>
+                <tbody id="sessions-tbody">
+                    <!-- Filled by JS -->
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        VALENTINA DASHBOARD v1.0 — Built with <span>♥</span> and a bit of sarcasm — 2026
+    </footer>
+</div>
+
+<script src="/js/dashboard.js"></script>
+</body>
+</html>
