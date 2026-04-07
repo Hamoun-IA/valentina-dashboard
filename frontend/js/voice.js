@@ -66,26 +66,38 @@
         if (!SpeechRecognition) { console.warn('SpeechRecognition not supported'); return; }
         recognition = new SpeechRecognition();
         recognition.lang = 'fr-FR';
-        recognition.interimResults = false;
-        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.continuous = true;
 
         recognition.onresult = (e) => {
+            let interim = '';
             for (let i = e.resultIndex; i < e.results.length; i++) {
-                if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+                if (e.results[i].isFinal) {
+                    finalTranscript += e.results[i][0].transcript + ' ';
+                } else {
+                    interim += e.results[i][0].transcript;
+                }
+            }
+            // Show live transcript in status
+            if (state === State.RECORDING) {
+                const display = (finalTranscript + interim).trim();
+                if (display) statusEl.textContent = display.slice(-80);
             }
         };
         recognition.onend = () => {
             if (state === State.RECORDING) {
-                // user finished speaking
-                if (finalTranscript.trim()) {
-                    sendUserMessage(finalTranscript.trim());
-                }
-                finalTranscript = '';
-                setState(State.PROCESSING);
+                // Auto-restart: browser kills recognition after silence,
+                // but WE decide when to stop (user clicks button)
+                try { recognition.start(); } catch(e) {}
             }
         };
         recognition.onerror = (e) => {
             console.error('STT error', e.error);
+            if (e.error === 'no-speech' && state === State.RECORDING) {
+                // No speech detected — just restart, don't stop
+                try { recognition.start(); } catch(ex) {}
+                return;
+            }
             if (state === State.RECORDING) setState(State.IDLE);
         };
     }
@@ -184,7 +196,16 @@
             recognition.start();
             setState(State.RECORDING);
         } else if (state === State.RECORDING) {
+            // User clicked stop — send accumulated transcript
             recognition.stop();
+            const text = finalTranscript.trim();
+            if (text) {
+                sendUserMessage(text);
+                setState(State.PROCESSING);
+            } else {
+                setState(State.IDLE);
+            }
+            finalTranscript = '';
         }
     }
 
