@@ -448,8 +448,9 @@ body::before {
         height: calc(100dvh - 50px);
         max-height: calc(100dvh - 50px);
         padding: 0.5rem;
+        padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
         gap: 0.5rem;
-        overflow: visible;
+        overflow: hidden;
     }
 
     .avatar-wrapper { flex: 0 0 auto; width: 60px; height: 60px; }
@@ -458,7 +459,7 @@ body::before {
 
     .chat-area {
         flex: 1 1 0;
-        min-height: 60px;
+        min-height: 0;
         max-height: none;
         max-width: 100%;
         overflow-y: auto;
