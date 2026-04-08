@@ -429,21 +429,33 @@ body::before {
         max-width: 100%;
     }
 
-    /* Large, easy-to-tap record button on mobile */
+    /* Mobile layout: mic fixed at bottom */
+    .voice-container {
+        padding-bottom: 140px; /* space for fixed mic */
+    }
+
     .record-btn {
-        width: 80px;
-        height: 80px;
-        min-width: 80px;
-        min-height: 80px;
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90px;
+        height: 90px;
+        min-width: 90px;
+        min-height: 90px;
+        z-index: 100;
+        box-shadow:
+            0 0 30px rgba(0, 240, 255, 0.3),
+            0 0 60px rgba(0, 240, 255, 0.15);
     }
 
     .record-btn svg {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
     }
 
     .chat-area {
-        max-height: 280px;
+        max-height: 250px;
         max-width: 100%;
     }
 
@@ -456,12 +468,13 @@ body::before {
 @media (max-width: 480px) {
     .voice-container {
         padding: 0.8rem 0.3rem;
+        padding-bottom: 150px;
         gap: 1rem;
     }
 
     .avatar-wrapper {
-        width: 80px;
-        height: 80px;
+        width: 70px;
+        height: 70px;
     }
 
     .status-indicator {
@@ -471,13 +484,26 @@ body::before {
     .equalizer-wrapper {
         height: 100px;
     }
+
+    .record-btn {
+        width: 100px;
+        height: 100px;
+        min-width: 100px;
+        min-height: 100px;
+        bottom: 25px;
+    }
+
+    .record-btn svg {
+        width: 40px;
+        height: 40px;
+    }
 }
 
 /* Touch-friendly */
 @media (pointer: coarse) {
     .record-btn {
-        min-width: 72px;
-        min-height: 72px;
+        min-width: 90px;
+        min-height: 90px;
     }
 
     .nav-links a {
