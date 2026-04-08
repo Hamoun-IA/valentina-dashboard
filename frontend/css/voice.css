@@ -11,6 +11,7 @@
     --glass-bg: rgba(15, 17, 40, 0.45);
     --glass-border: rgba(255, 255, 255, 0.06);
     --glass-blur: 20px;
+    --text-muted: #4a4e69;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -102,6 +103,7 @@ body::before {
     max-width: 700px;
     margin: 0 auto;
     gap: 1.2rem;
+    min-height: calc(100vh - 60px);
 }
 
 /* Avatar */
@@ -277,11 +279,12 @@ body::before {
 
 .chat-area:empty::before {
     content: 'Les messages apparaîtront ici...';
-    color: var(--text-muted);
+    color: var(--text-muted, #4a4e69);
     font-size: 0.85rem;
     text-align: center;
     align-self: center;
     margin: auto;
+    opacity: 0.7;
 }
 
 .chat-area::-webkit-scrollbar { width: 4px; }
@@ -440,27 +443,35 @@ body::before {
         max-width: 100%;
     }
 
-    /* Mobile layout: chat fills space, mic stays at bottom in flow */
+    /* Mobile layout: avatar → status → eq → chat → mic (top to bottom) */
     .voice-container {
         height: calc(100vh - 50px);
+        min-height: calc(100vh - 50px);
         padding-bottom: 1rem;
+        overflow: hidden;
     }
 
+    .avatar-wrapper { order: 1; flex-shrink: 0; }
+    .status-indicator { order: 2; flex-shrink: 0; }
+    .equalizer-wrapper { order: 3; flex-shrink: 0; }
+
     .chat-area {
-        max-height: none;
-        flex: 1;
-        min-height: 100px;
-        max-width: 100%;
         order: 4;
+        max-height: none;
+        flex: 1 1 auto;
+        min-height: 80px;
+        max-width: 100%;
+        overflow-y: auto;
     }
 
     .record-btn {
+        order: 5;
         width: 90px;
         height: 90px;
         min-width: 90px;
         min-height: 90px;
         flex-shrink: 0;
-        order: 5;
+        margin-top: auto;
         box-shadow:
             0 0 30px rgba(0, 240, 255, 0.3),
             0 0 60px rgba(0, 240, 255, 0.15);
@@ -470,10 +481,6 @@ body::before {
         width: 36px;
         height: 36px;
     }
-
-    .avatar-wrapper { order: 1; }
-    .status-indicator { order: 2; }
-    .equalizer-wrapper { order: 3; }
 
     .chat-msg {
         max-width: 90%;
