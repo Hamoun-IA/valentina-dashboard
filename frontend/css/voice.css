@@ -259,7 +259,9 @@ body::before {
 .chat-area {
     width: 100%;
     max-width: 600px;
+    min-height: 80px;
     max-height: 320px;
+    flex: 1;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -271,6 +273,15 @@ body::before {
     border-radius: 16px;
     scrollbar-width: thin;
     scrollbar-color: rgba(0, 240, 255, 0.2) transparent;
+}
+
+.chat-area:empty::before {
+    content: 'Les messages apparaîtront ici...';
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+    align-self: center;
+    margin: auto;
 }
 
 .chat-area::-webkit-scrollbar { width: 4px; }
@@ -429,21 +440,27 @@ body::before {
         max-width: 100%;
     }
 
-    /* Mobile layout: mic fixed at bottom */
+    /* Mobile layout: chat fills space, mic stays at bottom in flow */
     .voice-container {
-        padding-bottom: 140px; /* space for fixed mic */
+        height: calc(100vh - 50px);
+        padding-bottom: 1rem;
+    }
+
+    .chat-area {
+        max-height: none;
+        flex: 1;
+        min-height: 100px;
+        max-width: 100%;
+        order: 4;
     }
 
     .record-btn {
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
         width: 90px;
         height: 90px;
         min-width: 90px;
         min-height: 90px;
-        z-index: 100;
+        flex-shrink: 0;
+        order: 5;
         box-shadow:
             0 0 30px rgba(0, 240, 255, 0.3),
             0 0 60px rgba(0, 240, 255, 0.15);
@@ -454,10 +471,9 @@ body::before {
         height: 36px;
     }
 
-    .chat-area {
-        max-height: 250px;
-        max-width: 100%;
-    }
+    .avatar-wrapper { order: 1; }
+    .status-indicator { order: 2; }
+    .equalizer-wrapper { order: 3; }
 
     .chat-msg {
         max-width: 90%;
@@ -467,14 +483,13 @@ body::before {
 
 @media (max-width: 480px) {
     .voice-container {
-        padding: 0.8rem 0.3rem;
-        padding-bottom: 150px;
-        gap: 1rem;
+        padding: 0.5rem 0.3rem;
+        gap: 0.8rem;
     }
 
     .avatar-wrapper {
-        width: 70px;
-        height: 70px;
+        width: 60px;
+        height: 60px;
     }
 
     .status-indicator {
@@ -482,7 +497,7 @@ body::before {
     }
 
     .equalizer-wrapper {
-        height: 100px;
+        height: 80px;
     }
 
     .record-btn {
@@ -490,7 +505,6 @@ body::before {
         height: 100px;
         min-width: 100px;
         min-height: 100px;
-        bottom: 25px;
     }
 
     .record-btn svg {
