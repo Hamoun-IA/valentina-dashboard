@@ -9,6 +9,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 import { VRMLoaderPlugin, VRMUtils, VRMExpressionPresetName } from '@pixiv/three-vrm';
 
 // ────────────────────────────────────────────────────────────────
@@ -133,6 +134,231 @@ composer.addPass(hologramPass);
 
 const outputPass = new OutputPass();
 composer.addPass(outputPass);
+
+// ────────────────────────────────────────────────────────────────
+// Ground reflection (cyberpunk dancefloor)
+// ────────────────────────────────────────────────────────────────
+const mirrorGeo = new THREE.CircleGeometry(8, 64);
+const mirror = new Reflector(mirrorGeo, {
+  clipBias: 0.003,
+  textureWidth: Math.min(window.innerWidth, 1024),
+  textureHeight: Math.min(window.innerHeight, 1024),
+  color: 0x222244,
+});
+mirror.rotation.x = -Math.PI / 2;
+mirror.position.y = 0;
+scene.add(mirror);
+
+// Dark tint overlay on the mirror so reflection is subtle not mirror-perfect
+const mirrorTintGeo = new THREE.CircleGeometry(8, 64);
+const mirrorTintMat = new THREE.MeshBasicMaterial({
+  color: 0x05030f,
+  transparent: true,
+  opacity: 0.65,
+});
+const mirrorTint = new THREE.Mesh(mirrorTintGeo, mirrorTintMat);
+mirrorTint.rotation.x = -Math.PI / 2;
+mirrorTint.position.y = 0.001;
+scene.add(mirrorTint);
+
+// ────────────────────────────────────────────────────────────────
+// Volumetric fog — ground-level colored mist
+// ────────────────────────────────────────────────────────────────
+scene.fog = new THREE.FogExp2(0x0a0520, 0.11);
+
+const fogPlaneGeo = new THREE.PlaneGeometry(16, 16, 1, 1);
+const fogPlaneMat = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vPos;
+    void main() {
+      vUv = uv;
+      vPos = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float uTime;
+    varying vec2 vUv;
+    varying vec3 vPos;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float noise(vec2 p) {
+      vec2 i = floor(p); vec2 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1,0)), f.x),
+                 mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
+    }
+    void main() {
+      vec2 p = vPos.xy * 0.25;
+      float n = noise(p + uTime * 0.15);
+      n += noise(p * 2.0 - uTime * 0.1) * 0.5;
+      n += noise(p * 4.0 + uTime * 0.08) * 0.25;
+      n *= 0.55;
+      vec2 c = vUv - 0.5;
+      float radial = smoothstep(0.5, 0.05, length(c));
+      vec3 col = mix(vec3(0.08, 0.02, 0.25), vec3(0.0, 0.2, 0.4), n);
+      col += vec3(0.15, 0.0, 0.2) * pow(n, 2.0);
+      gl_FragColor = vec4(col * n * radial, n * radial * 0.55);
+    }
+  `,
+});
+const fogPlane = new THREE.Mesh(fogPlaneGeo, fogPlaneMat);
+fogPlane.rotation.x = -Math.PI / 2;
+fogPlane.position.y = 0.05;
+scene.add(fogPlane);
+
+// (second fog layer removed — was overpowering with additive blending)
+
+// ────────────────────────────────────────────────────────────────
+// Volumetric light beams (cones with shader)
+// ────────────────────────────────────────────────────────────────
+function makeLightBeam(color, posX, posZ) {
+  const geo = new THREE.ConeGeometry(0.8, 6, 24, 1, true);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uColor: { value: new THREE.Color(color) },
+      uTime: { value: 0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vPos;
+      void main() {
+        vUv = uv;
+        vPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uTime;
+      varying vec2 vUv;
+      varying vec3 vPos;
+      void main() {
+        // Fade from top (narrow, bright) to bottom (wide, faint)
+        float vFade = smoothstep(0.0, 1.0, 1.0 - vUv.y);
+        // Radial fade on the cone surface
+        float edge = smoothstep(0.0, 0.5, vUv.x) * smoothstep(1.0, 0.5, vUv.x);
+        float pulse = 0.8 + sin(uTime * 1.2) * 0.2;
+        float alpha = vFade * edge * 0.35 * pulse;
+        gl_FragColor = vec4(uColor * 1.5, alpha);
+      }
+    `,
+  });
+  const beam = new THREE.Mesh(geo, mat);
+  beam.position.set(posX, 3, posZ);
+  beam.rotation.x = Math.PI; // point down
+  return { mesh: beam, mat };
+}
+
+const beam1 = makeLightBeam(0x00f0ff, -1.5, -0.5);
+const beam2 = makeLightBeam(0xff00c8, 1.5, -0.5);
+const beam3 = makeLightBeam(0x9b5cff, 0, 1.2);
+scene.add(beam1.mesh, beam2.mesh, beam3.mesh);
+
+// ────────────────────────────────────────────────────────────────
+// Ambient dust — denser, smaller, closer particles for depth
+// ────────────────────────────────────────────────────────────────
+const DUST_COUNT = 800;
+const dustGeo = new THREE.BufferGeometry();
+const dPos = new Float32Array(DUST_COUNT * 3);
+const dSize = new Float32Array(DUST_COUNT);
+for (let i = 0; i < DUST_COUNT; i++) {
+  dPos[i * 3 + 0] = (Math.random() - 0.5) * 8;
+  dPos[i * 3 + 1] = Math.random() * 3.5;
+  dPos[i * 3 + 2] = (Math.random() - 0.5) * 6;
+  dSize[i] = 0.005 + Math.random() * 0.015;
+}
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dPos, 3));
+dustGeo.setAttribute('size', new THREE.BufferAttribute(dSize, 1));
+const dustMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `
+    attribute float size;
+    uniform float uTime;
+    varying float vAlpha;
+    void main() {
+      vec3 p = position;
+      p.y += sin(uTime * 0.3 + position.x * 3.0) * 0.05;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = size * (400.0 / -mv.z);
+      gl_Position = projectionMatrix * mv;
+      vAlpha = smoothstep(10.0, 0.5, -mv.z);
+    }
+  `,
+  fragmentShader: `
+    varying float vAlpha;
+    void main() {
+      vec2 c = gl_PointCoord - 0.5;
+      float d = length(c);
+      if (d > 0.5) discard;
+      float a = smoothstep(0.5, 0.0, d) * vAlpha * 0.5;
+      gl_FragColor = vec4(0.7, 0.85, 1.0, a);
+    }
+  `,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+const dust = new THREE.Points(dustGeo, dustMat);
+scene.add(dust);
+
+// ────────────────────────────────────────────────────────────────
+// Voice aura — radial shockwave pulse on speech start
+// ────────────────────────────────────────────────────────────────
+const auraGeo = new THREE.PlaneGeometry(4, 4, 1, 1);
+const auraMat = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  side: THREE.DoubleSide,
+  uniforms: {
+    uProgress: { value: -1 }, // -1 = inactive, 0-1 = active animation
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float uProgress;
+    varying vec2 vUv;
+    void main() {
+      if (uProgress < 0.0) discard;
+      vec2 c = vUv - 0.5;
+      float d = length(c) * 2.0;
+      // Ring expands outward: center at progress, width 0.08
+      float ringCenter = uProgress;
+      float ringWidth = 0.08;
+      float ring = smoothstep(ringCenter - ringWidth, ringCenter, d) *
+                   smoothstep(ringCenter + ringWidth, ringCenter, d);
+      // Fade out over the lifetime of the pulse
+      float fade = 1.0 - uProgress;
+      float alpha = ring * fade * 1.2;
+      vec3 col = mix(vec3(0.0, 0.9, 1.0), vec3(0.6, 0.3, 1.0), uProgress);
+      gl_FragColor = vec4(col * 1.8, alpha);
+    }
+  `,
+});
+const auraMesh = new THREE.Mesh(auraGeo, auraMat);
+auraMesh.position.set(0, 1.0, 0); // around chest height; billboarded each frame
+scene.add(auraMesh);
+
+let auraStartTime = -1;
+const AURA_DURATION = 1.1; // seconds
+
+function triggerVoiceAura() {
+  auraStartTime = time;
+}
 
 // Floor glow ring
 const ringGeo = new THREE.RingGeometry(0.4, 0.6, 64);
@@ -267,6 +493,7 @@ scene.add(nebula);
 // VRM loader
 // ────────────────────────────────────────────────────────────────
 let vrm = null;
+let eyeGlowSprites = []; // additive sprite overlays on each eye
 const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
 
@@ -298,6 +525,57 @@ loader.load(
         if (rLower) rLower.rotation.y = 0.2;
       }
     } catch (e) { console.warn('Pose adjust failed:', e); }
+
+    // Eye glow via additive sprites parented to VRM bones.
+    // VRM humanoid exposes leftEye/rightEye bones (optional). Fall back to head offsets.
+    const humanoid = vrm.humanoid;
+    const leftEyeBone = humanoid?.getNormalizedBoneNode('leftEye');
+    const rightEyeBone = humanoid?.getNormalizedBoneNode('rightEye');
+    const headBone = humanoid?.getNormalizedBoneNode('head');
+
+    // Build a radial gradient texture for the glow sprite
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0.0, 'rgba(255,255,255,1)');
+    grad.addColorStop(0.2, 'rgba(200,240,255,0.9)');
+    grad.addColorStop(0.5, 'rgba(100,200,255,0.4)');
+    grad.addColorStop(1.0, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+    const glowTex = new THREE.CanvasTexture(canvas);
+    glowTex.colorSpace = THREE.SRGBColorSpace;
+
+    function makeGlowSprite() {
+      const mat = new THREE.SpriteMaterial({
+        map: glowTex,
+        color: 0x9b5cff,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,   // always render on top (eyes glow through face)
+        depthWrite: false,
+      });
+      const s = new THREE.Sprite(mat);
+      s.scale.set(0.05, 0.05, 0.05);
+      s.renderOrder = 999;   // draw after the VRM
+      return s;
+    }
+
+    if (headBone) {
+      // Attach to head bone — most reliable. VRoid VRMs: eyes are at roughly
+      // y=+0.055, z=+0.08 relative to head bone origin, x ±0.032.
+      const lSprite = makeGlowSprite();
+      const rSprite = makeGlowSprite();
+      lSprite.position.set(0.038, 0.062, 0.085);
+      rSprite.position.set(-0.038, 0.062, 0.085);
+      headBone.add(lSprite);
+      headBone.add(rSprite);
+      eyeGlowSprites.push(lSprite, rSprite);
+      console.log('Eye glow: attached to head bone');
+    } else {
+      console.warn('Eye glow: no head bone found');
+    }
 
     loadingEl.style.display = 'none';
     console.log('VRM loaded:', vrm);
@@ -418,12 +696,53 @@ function animate() {
   particleMat.uniforms.uTime.value = time;
   nebulaMat.uniforms.uTime.value = time;
   hologramPass.uniforms.uTime.value = time;
+  fogPlaneMat.uniforms.uTime.value = time;
+  dustMat.uniforms.uTime.value = time;
+  beam1.mat.uniforms.uTime.value = time;
+  beam2.mat.uniforms.uTime.value = time + 1.3;
+  beam3.mat.uniforms.uTime.value = time + 2.7;
+  // Slowly sway the beams
+  beam1.mesh.rotation.z = Math.sin(time * 0.3) * 0.08;
+  beam2.mesh.rotation.z = Math.sin(time * 0.3 + 1.5) * 0.08;
+  beam3.mesh.rotation.x = Math.PI + Math.sin(time * 0.2) * 0.06;
 
   // Dynamic rim light pulse (intensifies subtly when speaking)
   const speakBoost = lipsyncActive ? smoothedVolume * 0.6 : 0;
   rimLight.intensity = 1.2 + Math.sin(time * 1.5) * 0.15 + speakBoost;
   keyLight.intensity = 0.9 + Math.sin(time * 0.8) * 0.08;
   bloomPass.strength = 0.35 + speakBoost * 0.15;
+
+  // Eye glow — subtle "eyes lighting up" effect via additive sprites
+  if (eyeGlowSprites.length > 0) {
+    const idleIntensity = 0.12 + Math.sin(time * 2.0) * 0.03;
+    const speakBoostEyes = lipsyncActive ? (0.45 + smoothedVolume * 0.9) : 0;
+    const totalIntensity = idleIntensity + speakBoostEyes;
+    // Color shift: deep violet (idle) → hot magenta (speaking)
+    const blend = lipsyncActive ? Math.min(1, smoothedVolume * 2.0) : 0;
+    // idle: #6B2BE0 deep violet → speaking: #FF2AD0 hot magenta
+    const r = (0.42 * (1 - blend) + 1.0 * blend);
+    const g = (0.17 * (1 - blend) + 0.16 * blend);
+    const b = (0.88 * (1 - blend) + 0.82 * blend);
+    const scale = 0.032 * (1 + totalIntensity * 0.1);
+    eyeGlowSprites.forEach((sp) => {
+      sp.material.color.setRGB(r * totalIntensity, g * totalIntensity, b * totalIntensity);
+      sp.scale.set(scale, scale, scale);
+    });
+  }
+
+  // Voice aura — expanding shockwave
+  if (auraStartTime >= 0) {
+    const elapsed = time - auraStartTime;
+    const progress = elapsed / AURA_DURATION;
+    if (progress >= 1) {
+      auraMat.uniforms.uProgress.value = -1;
+      auraStartTime = -1;
+    } else {
+      auraMat.uniforms.uProgress.value = progress;
+    }
+  }
+  // Billboard aura toward camera
+  auraMesh.quaternion.copy(camera.quaternion);
 
   composer.render();
   requestAnimationFrame(animate);
@@ -518,6 +837,7 @@ async function drainAudioQueue() {
 
     lipsyncActive = true;
     currentSource = src;
+    triggerVoiceAura(); // single shockwave at speech start
     src.onended = () => {
       lipsyncActive = false;
       currentSource = null;
