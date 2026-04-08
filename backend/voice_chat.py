@@ -12,6 +12,7 @@ import httpx
 
 from backend.voice_usage import log_voice_interaction, get_voice_stats
 from backend import bridge_memory
+from backend.lipsync import build_viseme_timeline
 
 logger = logging.getLogger("valentina.voice_chat")
 
@@ -34,6 +35,7 @@ GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 ELEVENLABS_VOICE_ID = "HuLbOdhRlvQQN8oPP0AJ"
 ELEVENLABS_TTS_URL = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}/stream"
+ELEVENLABS_TTS_TIMESTAMPS_URL = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}/with-timestamps"
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
 ELEVENLABS_SETTINGS = {"stability": 0.4, "similarity_boost": 0.8, "style": 0.6}
 
@@ -163,6 +165,59 @@ def _split_text_for_tts(text: str, max_chars: int = 4000) -> list[str]:
     return chunks if chunks else [text]
 
 
+async def elevenlabs_tts_with_timestamps(text: str) -> tuple[bytes, list[dict]]:
+    """
+    Call ElevenLabs with-timestamps endpoint to get MP3 audio + character-level timings.
+    Returns (audio_bytes, viseme_timeline).
+
+    Timeline is already phoneme-expanded and viseme-mapped via backend.lipsync.
+    For long text, splits into chunks and offsets subsequent timestamps.
+    """
+    import base64
+    headers = {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    text_chunks = _split_text_for_tts(text)
+
+    audio_parts: list[bytes] = []
+    full_timeline: list[dict] = []
+    time_offset = 0.0
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
+        for text_chunk in text_chunks:
+            payload = {
+                "text": text_chunk,
+                "model_id": ELEVENLABS_MODEL,
+                "voice_settings": ELEVENLABS_SETTINGS,
+            }
+            resp = await client.post(ELEVENLABS_TTS_TIMESTAMPS_URL, json=payload, headers=headers)
+            if resp.status_code != 200:
+                logger.error(f"ElevenLabs timestamps error {resp.status_code}: {resp.text[:300]}")
+                return b"", []
+            data = resp.json()
+            audio_b64 = data.get("audio_base64", "")
+            audio_parts.append(base64.b64decode(audio_b64))
+
+            align = data.get("alignment") or {}
+            chars = align.get("characters", [])
+            starts = align.get("character_start_times_seconds", [])
+            ends = align.get("character_end_times_seconds", [])
+
+            if chars and starts and ends:
+                chunk_tl = build_viseme_timeline(text_chunk, chars, starts, ends)
+                # Offset timings by cumulative position in the concatenated audio
+                for ev in chunk_tl:
+                    ev = dict(ev)
+                    ev['t'] = round(ev['t'] + time_offset, 4)
+                    full_timeline.append(ev)
+                if ends:
+                    time_offset += ends[-1] + 0.08  # gap between chunks
+
+    return b"".join(audio_parts), full_timeline
+
+
 async def elevenlabs_tts_stream(text: str):
     """Send text to ElevenLabs TTS and yield audio chunks.
     Splits long text into multiple requests to avoid character limits."""
@@ -260,11 +315,21 @@ async def voice_chat_ws(ws: WebSocket):
                 except Exception as e:
                     logger.debug(f"Fact extraction task launch failed: {e}")
 
-            # Now do TTS on the full response
+            # Now do TTS with character-level timings → phoneme-based viseme timeline
             if full_response:
                 try:
-                    async for audio_chunk in elevenlabs_tts_stream(full_response):
-                        await ws.send_bytes(audio_chunk)
+                    audio_bytes, viseme_timeline = await elevenlabs_tts_with_timestamps(full_response)
+                    if viseme_timeline:
+                        # Send the timeline BEFORE the audio so the client can prime it
+                        await ws.send_text(json.dumps({
+                            "type": "viseme_timeline",
+                            "events": viseme_timeline,
+                        }))
+                    if audio_bytes:
+                        # Send audio in chunks so the WS doesn't block on huge payloads
+                        CHUNK = 8192
+                        for i in range(0, len(audio_bytes), CHUNK):
+                            await ws.send_bytes(audio_bytes[i:i+CHUNK])
                 except Exception as e:
                     logger.error(f"TTS error: {e}")
                     await ws.send_text(json.dumps({"type": "error", "text": f"TTS error: {e}"}))

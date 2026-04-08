@@ -591,60 +591,101 @@ loader.load(
 );
 
 // ────────────────────────────────────────────────────────────────
-// Lipsync from live audio (analyser-driven viseme)
+// Lipsync — phoneme timeline driven (replaces FFT analyser)
 // ────────────────────────────────────────────────────────────────
 let audioCtx = null;
-let analyser = null;
 let currentSource = null;
 let lipsyncActive = false;
+let smoothedVolume = 0;  // kept for backward compat (eye glow, rim light)
+
+// Timeline state
+let visemeTimeline = [];       // array of {t, v, w, j}
+let timelineStartTime = 0;     // audioCtx.currentTime when audio begins
+let timelineIndex = 0;         // next event to process
+// Current target blendshape weights (will be lerped toward)
+const visemeTargets = { Aa: 0, Ih: 0, Ee: 0, Ou: 0, Oh: 0 };
+const visemeCurrent = { Aa: 0, Ih: 0, Ee: 0, Ou: 0, Oh: 0 };
+let jawTarget = 0;
+let jawCurrent = 0;
+
+let blinkTimer = 0;
+let nextBlinkAt = 2 + Math.random() * 3;
 
 function ensureAudioCtx() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.6;
   }
   if (audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
 }
 
-// Basic viseme: use volume + low/mid/high energy ratios to drive aa/ih/ou blendshapes
-const freqData = new Uint8Array(1024);
-let smoothedVolume = 0;
-let blinkTimer = 0;
-let nextBlinkAt = 2 + Math.random() * 3;
+// Map a viseme event onto the 5 mouth blendshapes.
+// Consonants (PP, FF, DD, KK) close the mouth or shape it briefly.
+function applyVisemeEvent(ev) {
+  // Reset all first
+  visemeTargets.Aa = 0;
+  visemeTargets.Ih = 0;
+  visemeTargets.Ee = 0;
+  visemeTargets.Ou = 0;
+  visemeTargets.Oh = 0;
+  jawTarget = 0;
+
+  switch (ev.v) {
+    case 'Aa': visemeTargets.Aa = ev.w; break;
+    case 'Ih': visemeTargets.Ih = ev.w; break;
+    case 'Ee': visemeTargets.Ee = ev.w; break;
+    case 'Ou': visemeTargets.Ou = ev.w; break;
+    case 'Oh': visemeTargets.Oh = ev.w; break;
+    case 'PP': /* lips closed */ break;  // all 0 = closed
+    case 'FF': visemeTargets.Ih = ev.w * 0.3; break; // slight stretch for lip bite
+    case 'DD': visemeTargets.Ih = ev.w * 0.4; break;
+    case 'KK': visemeTargets.Aa = ev.w * 0.35; break;
+    case 'Neutral': default: break;
+  }
+  jawTarget = ev.j;
+}
 
 function updateLipsync(dt) {
   if (!vrm || !vrm.expressionManager) return;
   const expr = vrm.expressionManager;
 
-  if (lipsyncActive && analyser) {
-    analyser.getByteFrequencyData(freqData);
-    // Low band (vowel openness), mid band (formants), high band (consonants)
-    let low = 0, mid = 0, high = 0;
-    for (let i = 2; i < 20; i++) low += freqData[i];
-    for (let i = 20; i < 80; i++) mid += freqData[i];
-    for (let i = 80; i < 200; i++) high += freqData[i];
-    low /= 18; mid /= 60; high /= 120;
-
-    const vol = Math.max(low, mid, high) / 255;
-    smoothedVolume = smoothedVolume * 0.6 + vol * 0.4;
-
-    const openness = Math.min(1, smoothedVolume * 2.2);
-    const aa = openness * (low / (low + mid + high + 1));
-    const ih = openness * (mid / (low + mid + high + 1));
-    const ou = openness * (high / (low + mid + high + 1));
-
-    expr.setValue(VRMExpressionPresetName.Aa, Math.min(1, aa * 2.5));
-    expr.setValue(VRMExpressionPresetName.Ih, Math.min(1, ih * 2.0));
-    expr.setValue(VRMExpressionPresetName.Ou, Math.min(1, ou * 1.8));
+  // Advance timeline if playing
+  if (lipsyncActive && visemeTimeline.length > 0 && audioCtx) {
+    const now = audioCtx.currentTime - timelineStartTime;
+    while (timelineIndex < visemeTimeline.length &&
+           visemeTimeline[timelineIndex].t <= now) {
+      applyVisemeEvent(visemeTimeline[timelineIndex]);
+      timelineIndex++;
+    }
+    // Rough "volume" proxy for the eye glow / rim light effects
+    const totalMouth = visemeTargets.Aa + visemeTargets.Ih + visemeTargets.Ee +
+                       visemeTargets.Ou + visemeTargets.Oh + jawTarget;
+    smoothedVolume = Math.min(1, smoothedVolume * 0.7 + totalMouth * 0.12);
   } else {
-    // Decay mouth to closed
+    // Decay everything back to rest
+    visemeTargets.Aa = visemeTargets.Ih = visemeTargets.Ee = 0;
+    visemeTargets.Ou = visemeTargets.Oh = 0;
+    jawTarget = 0;
     smoothedVolume *= 0.85;
-    expr.setValue(VRMExpressionPresetName.Aa, 0);
-    expr.setValue(VRMExpressionPresetName.Ih, 0);
-    expr.setValue(VRMExpressionPresetName.Ou, 0);
+  }
+
+  // Critically-damped lerp toward targets for smooth transitions
+  // Fast attack (55), slower release via max() gives natural mouth motion
+  const ATTACK = Math.min(1, dt * 28);
+  const RELEASE = Math.min(1, dt * 14);
+  for (const k of ['Aa', 'Ih', 'Ee', 'Ou', 'Oh']) {
+    const target = visemeTargets[k];
+    const cur = visemeCurrent[k];
+    const alpha = target > cur ? ATTACK : RELEASE;
+    visemeCurrent[k] = cur + (target - cur) * alpha;
+    expr.setValue(VRMExpressionPresetName[k], visemeCurrent[k]);
+  }
+  // Jaw bone rotation
+  jawCurrent = jawCurrent + (jawTarget - jawCurrent) * (jawTarget > jawCurrent ? ATTACK : RELEASE);
+  const jawBone = vrm.humanoid?.getNormalizedBoneNode('jaw');
+  if (jawBone) {
+    // Rotate ~0.35rad (~20°) max around X axis
+    jawBone.rotation.x = jawCurrent * 0.35;
   }
 
   // Idle blink
@@ -762,6 +803,7 @@ window.addEventListener('resize', () => {
 let ws = null;
 let audioQueue = [];
 let isPlaying = false;
+let pendingTimeline = null;
 
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -778,6 +820,10 @@ function connectWS() {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'text_chunk') {
           transcriptEl.textContent += msg.text;
+        } else if (msg.type === 'viseme_timeline') {
+          // Prime the phoneme timeline (arrives just before the audio bytes)
+          pendingTimeline = msg.events || [];
+          console.log(`Received viseme timeline: ${pendingTimeline.length} events`);
         } else if (msg.type === 'response_complete') {
           // Mark end of audio stream
           audioQueue.push(null); // sentinel
@@ -832,8 +878,13 @@ async function drainAudioQueue() {
     const audioBuf = await audioCtx.decodeAudioData(combined.buffer.slice(0));
     const src = audioCtx.createBufferSource();
     src.buffer = audioBuf;
-    src.connect(analyser);
-    analyser.connect(audioCtx.destination);
+    src.connect(audioCtx.destination);
+
+    // Prime phoneme timeline
+    visemeTimeline = pendingTimeline || [];
+    pendingTimeline = null;
+    timelineIndex = 0;
+    timelineStartTime = audioCtx.currentTime;
 
     lipsyncActive = true;
     currentSource = src;
@@ -842,6 +893,8 @@ async function drainAudioQueue() {
       lipsyncActive = false;
       currentSource = null;
       isPlaying = false;
+      visemeTimeline = [];
+      timelineIndex = 0;
       setStatus('PRÊTE');
       if (audioQueue.length > 0) drainAudioQueue();
     };
