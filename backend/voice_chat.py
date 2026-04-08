@@ -139,25 +139,51 @@ async def stream_gemini(messages: list[dict]):
                         continue
 
 
+def _split_text_for_tts(text: str, max_chars: int = 4000) -> list[str]:
+    """Split text into chunks suitable for ElevenLabs TTS (max ~5000 chars).
+    Splits on sentence boundaries to keep natural prosody."""
+    if len(text) <= max_chars:
+        return [text]
+    
+    import re
+    sentences = re.split(r'(?<=[.!?…])\s+', text)
+    chunks = []
+    current = ""
+    for s in sentences:
+        if len(current) + len(s) + 1 > max_chars and current:
+            chunks.append(current.strip())
+            current = s
+        else:
+            current = current + " " + s if current else s
+    if current.strip():
+        chunks.append(current.strip())
+    return chunks if chunks else [text]
+
+
 async def elevenlabs_tts_stream(text: str):
-    """Send text to ElevenLabs TTS and yield audio chunks."""
+    """Send text to ElevenLabs TTS and yield audio chunks.
+    Splits long text into multiple requests to avoid character limits."""
     headers = {
         "xi-api-key": ELEVENLABS_API_KEY,
         "Content-Type": "application/json",
     }
-    payload = {
-        "text": text,
-        "model_id": ELEVENLABS_MODEL,
-        "voice_settings": ELEVENLABS_SETTINGS,
-    }
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        async with client.stream("POST", ELEVENLABS_TTS_URL, json=payload, headers=headers) as resp:
-            if resp.status_code != 200:
-                body = await resp.aread()
-                logger.error(f"ElevenLabs error {resp.status_code}: {body[:300]}")
-                return
-            async for chunk in resp.aiter_bytes(chunk_size=4096):
-                yield chunk
+    
+    text_chunks = _split_text_for_tts(text)
+    
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+        for text_chunk in text_chunks:
+            payload = {
+                "text": text_chunk,
+                "model_id": ELEVENLABS_MODEL,
+                "voice_settings": ELEVENLABS_SETTINGS,
+            }
+            async with client.stream("POST", ELEVENLABS_TTS_URL, json=payload, headers=headers) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    logger.error(f"ElevenLabs error {resp.status_code}: {body[:300]}")
+                    return
+                async for chunk in resp.aiter_bytes(chunk_size=4096):
+                    yield chunk
 
 
 # --- WebSocket endpoint ---
