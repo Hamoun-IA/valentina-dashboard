@@ -9,6 +9,15 @@
 </head>
 <body>
 
+<!-- Navigation -->
+<nav class="navbar">
+    <a href="/" class="logo">VALENTINA</a>
+    <ul class="nav-links">
+        <li><a href="/" class="active">Dashboard</a></li>
+        <li><a href="/voice">Voice Chat</a></li>
+    </ul>
+</nav>
+
 <div class="dashboard">
     <!-- Header -->
     <header class="header glass animate-in">
@@ -46,6 +55,11 @@
             <div class="stat-label">Tool Calls</div>
             <div class="stat-value" id="total-tools">—</div>
             <div class="stat-sub" id="cost-estimate">coût estimé: —</div>
+        </div>
+        <div class="stat-card glass animate-in delay-5" style="--accent-color: var(--neon-purple);">
+            <div class="stat-label">Voice Chat</div>
+            <div class="stat-value" id="voice-total">—</div>
+            <div class="stat-sub" id="voice-breakdown">—</div>
         </div>
     </section>
 

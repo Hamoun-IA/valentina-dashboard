@@ -10,6 +10,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
 
+from backend.voice_usage import log_voice_interaction, get_voice_stats
+
 logger = logging.getLogger("valentina.voice_chat")
 
 router = APIRouter()
@@ -213,20 +215,24 @@ async def voice_chat_ws(ws: WebSocket):
             # Stream LLM response (Grok with Gemini fallback)
             full_response = ""
             used_fallback = False
+            model_used = XAI_MODEL
 
             try:
+                logger.info(f"Calling Grok ({XAI_MODEL}) with {len(history)} messages")
                 llm_gen = stream_grok(list(history))
                 full_response = await _process_llm_stream(llm_gen, ws)
+                logger.info(f"Grok response: {len(full_response)} chars")
             except Exception as e:
                 logger.warning(f"Grok failed ({e}), falling back to Gemini")
                 used_fallback = True
+                model_used = "gemini-2.0-flash"
                 try:
                     llm_gen = stream_gemini(list(history))
                     full_response = await _process_llm_stream(llm_gen, ws)
+                    logger.info(f"Gemini fallback response: {len(full_response)} chars")
                 except Exception as e2:
                     logger.error(f"Gemini also failed: {e2}")
                     await ws.send_text(json.dumps({"type": "error", "text": f"Both LLMs failed: {e2}"}))
-                    # Remove user message from history on total failure
                     history.pop()
                     continue
 
@@ -242,6 +248,13 @@ async def voice_chat_ws(ws: WebSocket):
                 except Exception as e:
                     logger.error(f"TTS error: {e}")
                     await ws.send_text(json.dumps({"type": "error", "text": f"TTS error: {e}"}))
+
+            # Log voice interaction
+            if full_response:
+                try:
+                    log_voice_interaction(user_text, full_response, model_used, used_fallback)
+                except Exception as log_err:
+                    logger.error(f"Failed to log voice interaction: {log_err}")
 
             await ws.send_text(json.dumps({
                 "type": "response_complete",
@@ -271,6 +284,12 @@ async def _process_llm_stream(gen, ws: WebSocket) -> str:
 
 class TTSRequest(BaseModel):
     text: str
+
+
+@router.get("/api/voice-stats")
+async def voice_stats_endpoint():
+    """Return voice chat usage statistics."""
+    return get_voice_stats()
 
 
 @router.post("/api/voice/tts")

@@ -302,6 +302,24 @@ async function loadSessions() {
     }).join('');
 }
 
+// ── Voice Stats ──
+async function loadVoiceStats() {
+    const data = await fetchAPI('voice-stats');
+    if (!data) return;
+
+    document.getElementById('voice-total').textContent = formatNumber(data.total_interactions);
+
+    if (data.model_breakdown && data.model_breakdown.length > 0) {
+        const parts = data.model_breakdown.map(m => {
+            const name = (m.model || 'unknown').split('-')[0];
+            return `${name}: ${m.count}`;
+        });
+        document.getElementById('voice-breakdown').textContent = parts.join(' / ');
+    } else {
+        document.getElementById('voice-breakdown').textContent = `aujourd'hui: ${data.today_interactions || 0}`;
+    }
+}
+
 // ── Initialize ──
 document.addEventListener('DOMContentLoaded', () => {
     loadOverview();
@@ -310,10 +328,12 @@ document.addEventListener('DOMContentLoaded', () => {
     loadProviderTokens();
     loadTools();
     loadSessions();
+    loadVoiceStats();
 
     // Auto-refresh every 30s
     setInterval(() => {
         loadOverview();
         loadSessions();
+        loadVoiceStats();
     }, 30000);
 });
