@@ -194,9 +194,9 @@ async def elevenlabs_tts_stream(text: str):
 @router.websocket("/ws/voice-chat")
 async def voice_chat_ws(ws: WebSocket):
     await ws.accept()
-    system_prompt = bridge_memory.build_persona_system_prompt()
+    # System prompt is rebuilt per-turn so we can inject query-relevant facts
     recent_turns = bridge_memory.load_recent_turns(limit=20)
-    history: list[dict] = [{"role": "system", "content": system_prompt}] + recent_turns
+    history: list[dict] = recent_turns[:]  # no system yet; injected per turn
     logger.info("Voice chat WebSocket connected")
 
     try:
@@ -216,14 +216,18 @@ async def voice_chat_ws(ws: WebSocket):
             history.append({"role": "user", "content": user_text})
             bridge_memory.log_turn("voice", "user", user_text)
 
+            # Rebuild system prompt with query-relevant long-term facts
+            system_prompt = bridge_memory.build_persona_system_prompt(current_query=user_text)
+            turn_messages = [{"role": "system", "content": system_prompt}] + history
+
             # Stream LLM response (Grok with Gemini fallback)
             full_response = ""
             used_fallback = False
             model_used = XAI_MODEL
 
             try:
-                logger.info(f"Calling Grok ({XAI_MODEL}) with {len(history)} messages")
-                llm_gen = stream_grok(list(history))
+                logger.info(f"Calling Grok ({XAI_MODEL}) with {len(turn_messages)} messages")
+                llm_gen = stream_grok(list(turn_messages))
                 full_response = await _process_llm_stream(llm_gen, ws)
                 logger.info(f"Grok response: {len(full_response)} chars")
             except Exception as e:
@@ -231,7 +235,7 @@ async def voice_chat_ws(ws: WebSocket):
                 used_fallback = True
                 model_used = "gemini-2.0-flash"
                 try:
-                    llm_gen = stream_gemini(list(history))
+                    llm_gen = stream_gemini(list(turn_messages))
                     full_response = await _process_llm_stream(llm_gen, ws)
                     logger.info(f"Gemini fallback response: {len(full_response)} chars")
                 except Exception as e2:
@@ -244,6 +248,17 @@ async def voice_chat_ws(ws: WebSocket):
             if full_response:
                 history.append({"role": "assistant", "content": full_response})
                 bridge_memory.log_turn("voice", "assistant", full_response, model=model_used)
+                # Fire-and-forget fact extraction (runs in threadpool so TTS isn't blocked)
+                try:
+                    asyncio.create_task(
+                        asyncio.to_thread(
+                            bridge_memory.extract_and_store_facts,
+                            user_text,
+                            full_response,
+                        )
+                    )
+                except Exception as e:
+                    logger.debug(f"Fact extraction task launch failed: {e}")
 
             # Now do TTS on the full response
             if full_response:
