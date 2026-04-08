@@ -30,9 +30,10 @@
     let recognition = null;
     let finalTranscript = '';
 
-    // ── Audio queue for binary chunks ──
-    let audioQueue    = [];
-    let isPlaying     = false;
+    // ── Audio buffer for binary chunks ──
+    let audioChunks   = [];
+    let audioElement  = null;
+    let sourceNode    = null;
     let currentValMsg = null;  // current Valentina chat bubble element
 
     // ────────────────────────────────────────────
@@ -157,32 +158,51 @@
 
     function handleAudioChunk(buffer) {
         if (state !== State.PLAYING) setState(State.PLAYING);
-        audioQueue.push(buffer);
-        if (!isPlaying) playNextChunk();
+        audioChunks.push(buffer);
     }
 
     function handleComplete() {
         currentValMsg = null;
-        // let remaining audio finish, then idle
-        if (!isPlaying) setState(State.IDLE);
+        // Combine all chunks into one blob and play smoothly
+        if (audioChunks.length > 0) {
+            playFullAudio();
+        } else {
+            setState(State.IDLE);
+        }
     }
 
-    // ── Audio playback queue ──
-    async function playNextChunk() {
-        if (audioQueue.length === 0) { isPlaying = false; setState(State.IDLE); return; }
-        isPlaying = true;
-        const buf = audioQueue.shift();
-        try {
-            const audioBuf = await audioCtx.decodeAudioData(buf.slice(0));
-            const src = audioCtx.createBufferSource();
-            src.buffer = audioBuf;
-            src.connect(gainNode);
-            src.onended = () => playNextChunk();
-            src.start();
-        } catch (e) {
-            console.warn('decode error', e);
-            playNextChunk();
+    // ── Play combined audio through Audio element + analyser ──
+    function playFullAudio() {
+        // Combine all chunks into a single MP3 blob
+        const blob = new Blob(audioChunks, { type: 'audio/mpeg' });
+        audioChunks = [];
+        const url = URL.createObjectURL(blob);
+
+        // Clean up previous
+        if (audioElement) {
+            audioElement.pause();
+            audioElement.removeAttribute('src');
         }
+        if (sourceNode) {
+            try { sourceNode.disconnect(); } catch(e) {}
+        }
+
+        // Create Audio element and connect to analyser for visualizer
+        audioElement = new Audio(url);
+        const source = audioCtx.createMediaElementSource(audioElement);
+        source.connect(gainNode);  // gainNode → analyser → destination
+        sourceNode = source;
+
+        audioElement.onended = () => {
+            URL.revokeObjectURL(url);
+            setState(State.IDLE);
+        };
+        audioElement.onerror = (e) => {
+            console.warn('Audio playback error', e);
+            URL.revokeObjectURL(url);
+            setState(State.IDLE);
+        };
+        audioElement.play().catch(e => console.warn('play() error', e));
     }
 
     // ── Record toggle ──
