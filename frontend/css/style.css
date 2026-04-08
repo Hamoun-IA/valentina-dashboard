@@ -742,3 +742,97 @@ body::after {
     0% { left: -50%; }
     100% { left: 150%; }
 }
+
+/* ── Providers Arsenal (live) ── */
+.provider-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.provider-head .provider-icon {
+    font-size: 1.2rem;
+    margin: 0;
+}
+.provider-head .provider-name {
+    flex: 1;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-primary);
+}
+.provider-head .provider-status-icon {
+    font-size: 0.7rem;
+    opacity: 0.9;
+}
+.provider-metric {
+    font-family: 'Orbitron', 'Rajdhani', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--provider-color);
+    text-shadow: 0 0 8px color-mix(in srgb, var(--provider-color) 40%, transparent);
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}
+.provider-sub {
+    font-size: 0.7rem;
+    color: var(--text-secondary, #8b8fa3);
+    margin-top: 4px;
+}
+.provider-error {
+    font-size: 0.7rem;
+    color: #ff4d6d;
+    word-break: break-word;
+    line-height: 1.3;
+}
+.provider-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 2px;
+}
+.provider-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--provider-color), color-mix(in srgb, var(--provider-color) 40%, white));
+    box-shadow: 0 0 8px var(--provider-color);
+    transition: width 0.5s ease;
+}
+
+.provider-card.provider-error {
+    border-color: rgba(255, 77, 109, 0.4);
+}
+.provider-card.provider-degraded {
+    border-color: rgba(251, 191, 36, 0.4);
+}
+
+@keyframes providerLowPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255, 45, 120, 0.0); }
+    50%     { box-shadow: 0 0 18px 2px rgba(255, 45, 120, 0.55); }
+}
+.provider-card.provider-low {
+    animation: providerLowPulse 1.8s ease-in-out infinite;
+    border-color: var(--neon-magenta, #ff00ff);
+}
+
+.providers-refresh-btn {
+    background: rgba(0, 240, 255, 0.08);
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    color: var(--neon-cyan, #00f0ff);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.providers-refresh-btn:hover:not(:disabled) {
+    background: rgba(0, 240, 255, 0.16);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.35);
+}
+.providers-refresh-btn:disabled { opacity: 0.5; cursor: wait; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { display: inline-block; animation: spin 0.9s linear infinite; }

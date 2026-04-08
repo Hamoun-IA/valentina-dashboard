@@ -64,23 +64,133 @@ async function loadOverview() {
     }
 }
 
-// ── Providers ──
-async function loadProviders() {
-    const data = await fetchAPI('providers');
-    if (!data) return;
+// ── Providers Arsenal (live) ──
+const PROVIDER_META = {
+    deepseek:   { icon: '🐳', color: 'var(--neon-cyan)'    },
+    openrouter: { icon: '🧭', color: 'var(--neon-magenta)' },
+    elevenlabs: { icon: '🎙️', color: 'var(--neon-violet)'  },
+    fal:        { icon: '🎨', color: 'var(--neon-magenta)' },
+    runpod:     { icon: '🖥️', color: 'var(--neon-cyan)'    },
+    tavily:     { icon: '🔎', color: 'var(--neon-violet)'  },
+    zai:        { icon: '🧠', color: 'var(--neon-cyan)'    },
+};
 
+function _fmtNum(n) {
+    if (n == null) return '—';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return String(n);
+}
+
+function _statusIcon(s) {
+    if (s === 'ok') return '🟢';
+    if (s === 'degraded') return '🟠';
+    return '🔴';
+}
+
+function _providerBody(p) {
+    if (p.status === 'error') {
+        return `<div class="provider-error">${(p.error || 'error').slice(0,120)}</div>`;
+    }
+    if (p.type === 'balance_usd') {
+        const bal = Number(p.balance || 0);
+        const total = Number(p.total || 0);
+        let pct = null;
+        let line = `$${bal.toFixed(2)}`;
+        if (total > 0) {
+            pct = Math.max(0, Math.min(100, (bal / total) * 100));
+            line = `$${bal.toFixed(2)} / $${total.toFixed(2)}`;
+        }
+        const bar = pct != null
+            ? `<div class="provider-bar"><div class="provider-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>`
+            : '';
+        const spend = (p.spend_per_hour != null && p.spend_per_hour > 0)
+            ? `<div class="provider-sub">spend: $${Number(p.spend_per_hour).toFixed(3)}/h</div>` : '';
+        return `<div class="provider-metric">${line}</div>${bar}${spend}`;
+    }
+    if (p.type === 'quota_chars') {
+        const used = Number(p.used || 0);
+        const limit = Number(p.limit || 0);
+        const pct = limit > 0 ? (used / limit) * 100 : 0;
+        const bar = `<div class="provider-bar"><div class="provider-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>`;
+        const note = p.error ? `<div class="provider-sub" style="color:#fbbf24">${p.error}</div>` : '';
+        return `<div class="provider-metric">${_fmtNum(used)} / ${_fmtNum(limit)} chars</div>${bar}${note}`;
+    }
+    if (p.type === 'quota_credits') {
+        const used = Number(p.used || 0);
+        const limit = p.limit;
+        if (limit != null) {
+            const pct = limit > 0 ? (used / limit) * 100 : 0;
+            const bar = `<div class="provider-bar"><div class="provider-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>`;
+            return `<div class="provider-metric">${_fmtNum(used)} / ${_fmtNum(limit)}</div>${bar}`;
+        }
+        return `<div class="provider-metric">${_fmtNum(used)} used</div>`;
+    }
+    if (p.type === 'rate_limits') {
+        if (p.requests_remaining != null) {
+            return `<div class="provider-metric">${p.requests_remaining} / ${p.requests_limit || '?'} req</div>`;
+        }
+        return `<div class="provider-sub">${p.note || 'no data'}</div>`;
+    }
+    return `<div class="provider-sub">—</div>`;
+}
+
+function _isLow(p) {
+    if (p.type === 'balance_usd' && p.total > 0) {
+        return (p.balance / p.total) < 0.2;
+    }
+    if (p.type === 'quota_chars' && p.limit > 0) {
+        return ((p.limit - p.used) / p.limit) < 0.2;
+    }
+    return false;
+}
+
+async function loadProviders() {
+    const resp = await fetchAPI('providers/live');
+    if (!resp || !resp.providers) return;
+    _renderProviders(resp);
+}
+
+function _renderProviders(resp) {
     const grid = document.getElementById('providers-grid');
-    grid.innerHTML = data.map(p => `
-        <div class="provider-card" style="--provider-color: ${p.color}">
-            <div class="provider-icon">${p.icon}</div>
-            <div class="provider-name">${p.name}</div>
-            <span class="provider-tier tier-${p.tier}">${p.tier}</span>
-            <div class="provider-status">
-                <div class="provider-status-dot"></div>
-                <span>active</span>
+    const updatedEl = document.getElementById('providers-updated-at');
+    if (updatedEl && resp.updated_at) {
+        const d = new Date(resp.updated_at);
+        updatedEl.textContent = `(${resp.source || ''} · ${d.toLocaleTimeString()})`;
+    }
+    grid.innerHTML = resp.providers.map(p => {
+        const meta = PROVIDER_META[p.id] || { icon: '⚡', color: 'var(--neon-cyan)' };
+        const lowClass = _isLow(p) ? 'provider-low' : '';
+        const statusClass = `provider-${p.status || 'ok'}`;
+        return `
+            <div class="provider-card ${statusClass} ${lowClass}" style="--provider-color: ${meta.color}">
+                <div class="provider-head">
+                    <span class="provider-icon">${meta.icon}</span>
+                    <span class="provider-name">${p.name || p.id}</span>
+                    <span class="provider-status-icon">${_statusIcon(p.status)}</span>
+                </div>
+                ${_providerBody(p)}
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
+}
+
+async function refreshProviders() {
+    const btn = document.getElementById('providers-refresh-btn');
+    const icon = document.getElementById('providers-refresh-icon');
+    if (btn) btn.disabled = true;
+    if (icon) icon.classList.add('spin');
+    try {
+        const resp = await fetch(`/api/providers/refresh`, { method: 'POST' });
+        if (resp.ok) {
+            const data = await resp.json();
+            _renderProviders(data);
+        }
+    } catch (e) {
+        console.error('provider refresh failed', e);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (icon) icon.classList.remove('spin');
+    }
 }
 
 // ── Activity Timeline Chart ──
@@ -336,4 +446,9 @@ document.addEventListener('DOMContentLoaded', () => {
         loadSessions();
         loadVoiceStats();
     }, 30000);
+
+    // Providers: refresh every 60s + button handler
+    setInterval(loadProviders, 60000);
+    const rbtn = document.getElementById('providers-refresh-btn');
+    if (rbtn) rbtn.addEventListener('click', refreshProviders);
 });

@@ -10,9 +10,18 @@ sys.path.insert(0, str(Path(__file__).parent))
 import hermes_data as hd
 
 from backend.voice_chat import router as voice_chat_router
+from backend.providers.live_api import get_live_providers
 
 app = FastAPI(title="Valentina Dashboard", version="1.0.0")
 app.include_router(voice_chat_router)
+
+@app.get("/api/providers/live")
+async def providers_live():
+    return await get_live_providers(force=False)
+
+@app.post("/api/providers/refresh")
+async def providers_refresh():
+    return await get_live_providers(force=True)
 
 # API Routes
 @app.get("/api/overview")
