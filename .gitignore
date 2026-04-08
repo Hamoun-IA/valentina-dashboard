@@ -3,3 +3,7 @@ __pycache__/
 *.pyc
 .env
 .env.*
+
+# Large 3D model files (downloaded/generated separately)
+frontend/assets/models/*.vrm
+frontend/assets/models/*.glb

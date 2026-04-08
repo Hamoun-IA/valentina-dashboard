@@ -65,3 +65,7 @@ def root():
 @app.get("/voice")
 def voice():
     return FileResponse(str(frontend_dir / "voice.html"))
+
+@app.get("/avatar")
+def avatar():
+    return FileResponse(str(frontend_dir / "avatar.html"))

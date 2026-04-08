@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Valentina — Avatar</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    :root {
+      --neon-cyan: #00f0ff;
+      --neon-magenta: #ff00c8;
+      --neon-violet: #9b5cff;
+      --bg-deep: #05030f;
+    }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg-deep);
+      color: #e6f1ff;
+      font-family: 'Orbitron', 'Segoe UI', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+    }
+    #scene {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(ellipse at center, #1a0a2e 0%, #05030f 70%);
+    }
+    #ui-top {
+      position: fixed;
+      top: 16px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      text-align: center;
+    }
+    #ui-top h1 {
+      font-size: 24px;
+      color: var(--neon-cyan);
+      text-shadow: 0 0 12px var(--neon-cyan), 0 0 24px var(--neon-violet);
+      letter-spacing: 4px;
+      margin: 0;
+      font-weight: 300;
+    }
+    #status {
+      margin-top: 4px;
+      font-size: 12px;
+      letter-spacing: 2px;
+      color: #8fb3cc;
+    }
+    #status.listening { color: var(--neon-magenta); text-shadow: 0 0 8px var(--neon-magenta); }
+    #status.speaking { color: var(--neon-cyan); text-shadow: 0 0 8px var(--neon-cyan); }
+    #status.thinking { color: var(--neon-violet); text-shadow: 0 0 8px var(--neon-violet); }
+
+    #ui-bottom {
+      position: fixed;
+      bottom: 32px; left: 0; right: 0;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+    #transcript {
+      max-width: 640px;
+      min-height: 48px;
+      padding: 12px 20px;
+      background: rgba(10, 8, 30, 0.6);
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 12px;
+      backdrop-filter: blur(12px);
+      font-size: 14px;
+      line-height: 1.5;
+      color: #d0e6ff;
+      text-align: center;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.1);
+    }
+    #transcript:empty::before {
+      content: 'Les messages apparaîtront ici...';
+      color: #456;
+      font-style: italic;
+    }
+    #controls {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    #input {
+      width: 360px;
+      padding: 12px 16px;
+      background: rgba(5, 3, 15, 0.8);
+      border: 1px solid var(--neon-cyan);
+      border-radius: 24px;
+      color: #e6f1ff;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
+    }
+    #input:focus {
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
+    }
+    #send-btn {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--neon-cyan), var(--neon-violet));
+      border: none;
+      color: #05030f;
+      font-size: 20px;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+      transition: transform 0.15s;
+    }
+    #send-btn:hover { transform: scale(1.08); }
+    #send-btn:active { transform: scale(0.95); }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #back-link {
+      position: fixed;
+      top: 16px; left: 16px;
+      z-index: 10;
+      color: var(--neon-cyan);
+      text-decoration: none;
+      font-size: 12px;
+      letter-spacing: 2px;
+      padding: 6px 12px;
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      border-radius: 16px;
+      background: rgba(5, 3, 15, 0.6);
+      backdrop-filter: blur(8px);
+    }
+    #back-link:hover { background: rgba(0, 240, 255, 0.1); }
+
+    .loading {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-deep);
+      z-index: 100;
+      font-size: 14px;
+      letter-spacing: 3px;
+      color: var(--neon-cyan);
+    }
+  </style>
+</head>
+<body>
+  <div id="loading" class="loading">⧗ CHARGEMENT DE VALENTINA ⧗</div>
+
+  <a id="back-link" href="/">← DASHBOARD</a>
+
+  <div id="ui-top">
+    <h1>VALENTINA</h1>
+    <div id="status">PRÊTE</div>
+  </div>
+
+  <canvas id="scene"></canvas>
+
+  <div id="ui-bottom">
+    <div id="transcript"></div>
+    <div id="controls">
+      <input id="input" type="text" placeholder="Parle à Valentina..." autocomplete="off" />
+      <button id="send-btn" title="Envoyer">➤</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+      "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.6/lib/three-vrm.module.min.js"
+    }
+  }
+  </script>
+  <script type="module" src="/js/avatar.js"></script>
+</body>
+</html>
