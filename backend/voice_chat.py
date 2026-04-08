@@ -11,6 +11,7 @@ from pydantic import BaseModel
 import httpx
 
 from backend.voice_usage import log_voice_interaction, get_voice_stats
+from backend import bridge_memory
 
 logger = logging.getLogger("valentina.voice_chat")
 
@@ -193,7 +194,9 @@ async def elevenlabs_tts_stream(text: str):
 @router.websocket("/ws/voice-chat")
 async def voice_chat_ws(ws: WebSocket):
     await ws.accept()
-    history: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_prompt = bridge_memory.build_persona_system_prompt()
+    recent_turns = bridge_memory.load_recent_turns(limit=20)
+    history: list[dict] = [{"role": "system", "content": system_prompt}] + recent_turns
     logger.info("Voice chat WebSocket connected")
 
     try:
@@ -211,6 +214,7 @@ async def voice_chat_ws(ws: WebSocket):
 
             user_text = msg["text"].strip()
             history.append({"role": "user", "content": user_text})
+            bridge_memory.log_turn("voice", "user", user_text)
 
             # Stream LLM response (Grok with Gemini fallback)
             full_response = ""
@@ -239,6 +243,7 @@ async def voice_chat_ws(ws: WebSocket):
             # Save assistant response to history
             if full_response:
                 history.append({"role": "assistant", "content": full_response})
+                bridge_memory.log_turn("voice", "assistant", full_response, model=model_used)
 
             # Now do TTS on the full response
             if full_response:
