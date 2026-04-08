@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#00f0ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/assets/icon-192.png">
     <title>Valentina — Voice Chat</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,6 +18,7 @@
     <!-- Navigation -->
     <nav class="navbar">
         <a href="/" class="logo">VALENTINA</a>
+        <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.nav-links').classList.toggle('open')"><span></span></button>
         <ul class="nav-links">
             <li><a href="/">Dashboard</a></li>
             <li><a href="/voice" class="active">Voice Chat</a></li>
@@ -47,5 +53,10 @@
     </main>
 
     <script src="/js/voice.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').then(r => console.log('SW registered', r.scope)).catch(e => console.warn('SW failed', e));
+    }
+    </script>
 </body>
 </html>

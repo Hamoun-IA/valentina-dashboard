@@ -337,12 +337,151 @@ body::before {
     box-shadow: 0 0 8px rgba(255, 0, 0, 0.4);
 }
 
+/* ── Hamburger Menu Toggle ── */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    margin-left: auto;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-toggle span,
+.nav-toggle span::before,
+.nav-toggle span::after {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--neon-cyan);
+    border-radius: 1px;
+    position: relative;
+    transition: all 0.3s;
+}
+
+.nav-toggle span::before,
+.nav-toggle span::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    width: 22px;
+}
+
+.nav-toggle span::before { top: -7px; }
+.nav-toggle span::after { top: 7px; }
+
 /* Responsive */
-@media (max-width: 600px) {
-    .voice-container { padding: 1rem 0.5rem; }
-    .avatar-wrapper { width: 90px; height: 90px; }
-    .equalizer-wrapper { height: 110px; }
-    .record-btn { width: 64px; height: 64px; }
-    .chat-area { max-height: 250px; }
-    .navbar { padding: 0.6rem 1rem; }
+@media (max-width: 768px) {
+    .navbar {
+        flex-wrap: wrap;
+        padding: 0.6rem 1rem;
+    }
+
+    .navbar .logo {
+        font-size: 1rem;
+        margin-right: auto;
+    }
+
+    .nav-toggle {
+        display: flex;
+    }
+
+    .nav-links {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        gap: 0;
+        padding-top: 0.5rem;
+    }
+
+    .nav-links.open {
+        display: flex;
+    }
+
+    .nav-links a {
+        display: flex;
+        align-items: center;
+        padding: 0.6rem 1rem;
+        min-height: 44px;
+    }
+
+    .connection-dot {
+        order: -1;
+        margin-left: 0;
+        margin-right: 0.5rem;
+    }
+
+    .voice-container {
+        padding: 1rem 0.5rem;
+    }
+
+    .avatar-wrapper {
+        width: 90px;
+        height: 90px;
+    }
+
+    .equalizer-wrapper {
+        height: 110px;
+        max-width: 100%;
+    }
+
+    /* Large, easy-to-tap record button on mobile */
+    .record-btn {
+        width: 80px;
+        height: 80px;
+        min-width: 80px;
+        min-height: 80px;
+    }
+
+    .record-btn svg {
+        width: 32px;
+        height: 32px;
+    }
+
+    .chat-area {
+        max-height: 280px;
+        max-width: 100%;
+    }
+
+    .chat-msg {
+        max-width: 90%;
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .voice-container {
+        padding: 0.8rem 0.3rem;
+        gap: 1rem;
+    }
+
+    .avatar-wrapper {
+        width: 80px;
+        height: 80px;
+    }
+
+    .status-indicator {
+        font-size: 0.75rem;
+    }
+
+    .equalizer-wrapper {
+        height: 100px;
+    }
+}
+
+/* Touch-friendly */
+@media (pointer: coarse) {
+    .record-btn {
+        min-width: 72px;
+        min-height: 72px;
+    }
+
+    .nav-links a {
+        min-height: 44px;
+        min-width: 44px;
+    }
 }

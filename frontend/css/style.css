@@ -524,16 +524,204 @@ body::after {
 .delay-4 { animation-delay: 0.4s; }
 .delay-5 { animation-delay: 0.5s; }
 
+/* ── Hamburger Menu Toggle ── */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    margin-left: auto;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-toggle span,
+.nav-toggle span::before,
+.nav-toggle span::after {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--neon-cyan);
+    border-radius: 1px;
+    position: relative;
+    transition: all 0.3s;
+}
+
+.nav-toggle span::before,
+.nav-toggle span::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    width: 22px;
+}
+
+.nav-toggle span::before { top: -7px; }
+.nav-toggle span::after { top: 7px; }
+
 /* ── Responsive ── */
 @media (max-width: 1024px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
     .main-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 640px) {
-    .stats-grid { grid-template-columns: 1fr; }
-    .header { flex-direction: column; gap: 12px; text-align: center; }
-    .providers-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 768px) {
+    .navbar {
+        flex-wrap: wrap;
+        padding: 0.6rem 1rem;
+    }
+
+    .navbar .logo {
+        font-size: 1rem;
+        margin-right: auto;
+    }
+
+    .nav-toggle {
+        display: flex;
+    }
+
+    .nav-links {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        gap: 0;
+        padding-top: 0.5rem;
+    }
+
+    .nav-links.open {
+        display: flex;
+    }
+
+    .nav-links a {
+        display: block;
+        padding: 0.6rem 1rem;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .main-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard {
+        padding: 12px;
+    }
+
+    .header {
+        flex-direction: column;
+        gap: 12px;
+        text-align: center;
+        padding: 16px;
+    }
+
+    .header-title {
+        font-size: 1.2rem;
+    }
+
+    .header-logo {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
+    }
+
+    .stat-card {
+        padding: 16px;
+    }
+
+    .providers-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .chart-container {
+        height: 220px;
+    }
+
+    .card {
+        padding: 16px;
+    }
+
+    .card-title {
+        font-size: 0.75rem;
+        letter-spacing: 1px;
+    }
+
+    .tool-name {
+        width: 100px;
+        font-size: 0.7rem;
+    }
+
+    .sessions-table th,
+    .sessions-table td {
+        padding: 8px;
+        font-size: 0.75rem;
+        white-space: nowrap;
+    }
+
+    /* Ensure horizontal scroll for table */
+    .sessions-table {
+        min-width: 600px;
+    }
+
+    .footer {
+        font-size: 0.65rem;
+        letter-spacing: 1px;
+    }
+}
+
+@media (max-width: 480px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .header-title {
+        font-size: 1rem;
+    }
+
+    .header-subtitle {
+        font-size: 0.7rem;
+        letter-spacing: 1px;
+    }
+
+    .providers-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .provider-card {
+        padding: 12px;
+    }
+
+    .tool-name {
+        width: 80px;
+        font-size: 0.65rem;
+    }
+}
+
+/* Touch-friendly tap targets */
+@media (pointer: coarse) {
+    .nav-links a {
+        min-height: 44px;
+        min-width: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    .badge {
+        min-height: 32px;
+        display: inline-flex;
+        align-items: center;
+    }
 }
 
 /* ── Neon text scanning effect ── */

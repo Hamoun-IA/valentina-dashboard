@@ -49,6 +49,15 @@ app.mount("/css", StaticFiles(directory=str(frontend_dir / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(frontend_dir / "js")), name="js")
 app.mount("/assets", StaticFiles(directory=str(frontend_dir / "assets")), name="assets")
 
+@app.get("/manifest.json")
+def manifest():
+    return FileResponse(str(frontend_dir / "manifest.json"), media_type="application/manifest+json")
+
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(str(frontend_dir / "sw.js"), media_type="application/javascript",
+                        headers={"Service-Worker-Allowed": "/"})
+
 @app.get("/")
 def root():
     return FileResponse(str(frontend_dir / "index.html"))
