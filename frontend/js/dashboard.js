@@ -29,6 +29,32 @@ function formatNumber(n) {
     return n.toString();
 }
 
+function formatTimeFr(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('fr-BE', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    }).format(d);
+}
+
+function formatDateTimeFr(value, opts = {}) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('fr-BE', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        ...opts,
+    }).format(d);
+}
+
 async function fetchAPI(endpoint) {
     try {
         const res = await fetch(`/api/${endpoint}`);
@@ -540,16 +566,16 @@ async function loadSubscriptionUsage() {
         let inner = '';
         if (codex.primary_remaining_percent != null) {
             worstPct = Math.max(worstPct, 100 - codex.primary_remaining_percent);
-            inner += _subBar(codex.primary_remaining_percent, '5h restants', codex.primary_resets_at ? `reset ${new Date(codex.primary_resets_at).toLocaleTimeString()}` : null);
+            inner += _subBar(codex.primary_remaining_percent, '5h restants', codex.primary_resets_at ? `reset ${formatTimeFr(codex.primary_resets_at)}` : null);
         }
         if (codex.secondary_remaining_percent != null) {
             worstPct = Math.max(worstPct, 100 - codex.secondary_remaining_percent);
-            inner += _subBar(codex.secondary_remaining_percent, 'Hebdo restants', codex.secondary_resets_at ? `reset ${new Date(codex.secondary_resets_at).toLocaleString()}` : null);
+            inner += _subBar(codex.secondary_remaining_percent, 'Hebdo restants', codex.secondary_resets_at ? `reset ${formatDateTimeFr(codex.secondary_resets_at)}` : null);
         }
         const reviewLimit = codex.rate_limits_by_limit_id && (codex.rate_limits_by_limit_id.review || codex.rate_limits_by_limit_id.code_review || codex.rate_limits_by_limit_id.codex_review);
         if (reviewLimit && reviewLimit.primary_remaining_percent != null) {
             worstPct = Math.max(worstPct, 100 - reviewLimit.primary_remaining_percent);
-            inner += _subBar(reviewLimit.primary_remaining_percent, 'Revue code', reviewLimit.primary_resets_at ? `reset ${new Date(reviewLimit.primary_resets_at).toLocaleString()}` : null);
+            inner += _subBar(reviewLimit.primary_remaining_percent, 'Revue code', reviewLimit.primary_resets_at ? `reset ${formatDateTimeFr(reviewLimit.primary_resets_at)}` : null);
         }
         if (codex.credits) {
             const balance = codex.credits.balance ?? '—';
@@ -613,7 +639,7 @@ async function loadSubscriptionUsage() {
     const updatedAtEl = document.getElementById('sub-updated-at');
     const updatedAt = data.claude_live?.fetched_at || data.codex?.last_seen_at || data.claude_code?.last_seen_at;
     if (updatedAtEl) {
-        updatedAtEl.textContent = updatedAt ? `(updated ${new Date(updatedAt).toLocaleTimeString()})` : '';
+        updatedAtEl.textContent = updatedAt ? `(updated ${formatDateTimeFr(updatedAt, { second: '2-digit' })})` : '';
     }
 
     // Status badge
