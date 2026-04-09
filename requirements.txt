@@ -1,0 +1,28 @@
+# Valentina Dashboard — Python dependencies
+# Generated 2026-04-09 for the migration to boss server
+#
+# Philosophy: pin major/minor versions for reproducibility, but allow patch updates.
+# Actual versions used on cyberpunk at commit 5596cf9 noted in comments.
+
+# Web framework
+fastapi>=0.135,<1.0            # was 0.135.3
+uvicorn[standard]>=0.30,<1.0   # ASGI server with websockets + httptools
+
+# HTTP client (async)
+httpx>=0.28,<1.0               # was 0.28.1
+
+# Data validation
+pydantic>=2.11,<3.0            # was 2.11.x
+
+# Config
+PyYAML>=6.0,<7.0               # was 6.0.2
+
+# Lipsync pipeline (phoneme-based)
+phonemizer>=3.3,<4.0           # requires espeak-ng binary (installed at system level)
+
+# Testing
+pytest>=8.4,<9.0               # was 8.4.x
+pytest-asyncio>=1.0,<2.0       # async test support
+
+# Optional runtime deps (pulled in transitively but pinning for safety)
+python-dotenv>=1.0,<2.0        # .env file loading
