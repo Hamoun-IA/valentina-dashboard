@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import hermes_data as hd
 
 from backend.providers.live_api import get_live_providers
+from backend.claude_live_usage import scrape_claude_live_usage
 from backend.subscription_usage import get_subscription_usage
 from backend.voice_chat import router as voice_chat_router
 from backend.zai_tracker import get_stats, log_usage
@@ -251,6 +252,12 @@ def cron():
 async def zai_usage():
     """Return locally tracked Z.ai usage stats."""
     return await asyncio.to_thread(get_stats)
+
+
+@app.get("/api/claude/live-usage")
+async def claude_live_usage():
+    """Scrape Claude Code /usage TUI via tmux for live quota data."""
+    return await asyncio.to_thread(scrape_claude_live_usage)
 
 
 @app.get("/api/subscriptions/usage")
