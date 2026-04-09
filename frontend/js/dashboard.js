@@ -510,11 +510,111 @@ async function loadZaiUsage() {
     }
 }
 
+// ── Subscription Usage Widget ──
+function _subBar(pct, label, extra) {
+    if (pct == null) return '';
+    const cls = pct >= 100 ? 'zai-bar-danger' : pct >= 80 ? 'zai-bar-warning' : '';
+    const extraHtml = extra ? `<span class="zai-meta" style="margin-left:8px;font-size:0.7rem;">${extra}</span>` : '';
+    return `
+        <div style="margin-bottom:6px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.78rem;margin-bottom:2px;">
+                <span>${label}</span><span>${pct.toFixed(1)}%${extraHtml}</span>
+            </div>
+            <div class="zai-bar-track"><div class="zai-bar-fill ${cls}" style="width:${Math.min(100, pct).toFixed(1)}%"></div></div>
+        </div>`;
+}
+
+async function loadSubscriptionUsage() {
+    const data = await fetchAPI('subscriptions/usage');
+    const section = document.getElementById('sub-usage-section');
+    if (!data) { if (section) section.style.display = 'none'; return; }
+
+    let html = '';
+    let hasContent = false;
+    let worstPct = 0;
+
+    // Codex Plus
+    const codex = data.codex;
+    if (codex && codex.available) {
+        hasContent = true;
+        let inner = '';
+        if (codex.primary_used_percent != null) {
+            worstPct = Math.max(worstPct, codex.primary_used_percent);
+            inner += _subBar(codex.primary_used_percent, 'Rolling 5h', codex.primary_resets_at ? _relativeTime(codex.primary_resets_at) : null);
+        }
+        if (codex.secondary_used_percent != null) {
+            worstPct = Math.max(worstPct, codex.secondary_used_percent);
+            inner += _subBar(codex.secondary_used_percent, 'Weekly', codex.secondary_resets_at ? _relativeTime(codex.secondary_resets_at) : null);
+        }
+        if (inner) {
+            html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">Codex Plus</div>${inner}</div>`;
+        }
+    }
+
+    // Claude Max (live)
+    const live = data.claude_live;
+    if (live && live.available) {
+        hasContent = true;
+        let inner = '';
+        if (live.current_session && live.current_session.used_percent != null) {
+            worstPct = Math.max(worstPct, live.current_session.used_percent);
+            inner += _subBar(live.current_session.used_percent, 'Session', live.current_session.resets_text || null);
+        }
+        if (live.current_week_all_models && live.current_week_all_models.used_percent != null) {
+            worstPct = Math.max(worstPct, live.current_week_all_models.used_percent);
+            inner += _subBar(live.current_week_all_models.used_percent, 'Week (all)', live.current_week_all_models.resets_text || null);
+        }
+        if (live.current_week_sonnet && live.current_week_sonnet.used_percent != null) {
+            worstPct = Math.max(worstPct, live.current_week_sonnet.used_percent);
+            inner += _subBar(live.current_week_sonnet.used_percent, 'Week (Sonnet)', live.current_week_sonnet.resets_text || null);
+        }
+        if (live.extra_usage) {
+            const eu = live.extra_usage;
+            const spendLine = eu.spent_usd != null && eu.limit_usd != null
+                ? `$${eu.spent_usd.toFixed(2)} / $${eu.limit_usd.toFixed(2)}`
+                : null;
+            if (eu.used_percent != null) {
+                inner += _subBar(eu.used_percent, 'Extra usage', spendLine);
+            } else if (spendLine) {
+                inner += `<div style="font-size:0.75rem;opacity:0.7;margin-top:4px;">Extra: ${spendLine}</div>`;
+            }
+        }
+        if (inner) {
+            html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">Claude Max</div>${inner}</div>`;
+        }
+    }
+
+    // Local telemetry footer
+    const cc = data.claude_code;
+    if (cc && cc.available) {
+        hasContent = true;
+        const parts = [];
+        if (cc.assistant_messages_total) parts.push(`${formatNumber(cc.assistant_messages_total)} msgs`);
+        const totalTok = (cc.input_tokens_total || 0) + (cc.output_tokens_total || 0);
+        if (totalTok) parts.push(`${formatNumber(totalTok)} tok`);
+        if (parts.length) {
+            html += `<div class="zai-footer" style="margin-top:8px;font-size:0.72rem;opacity:0.6;">Local telemetry: ${parts.join(' · ')}</div>`;
+        }
+    }
+
+    if (!hasContent) { if (section) section.style.display = 'none'; return; }
+    section.style.display = '';
+    document.getElementById('sub-usage-body').innerHTML = `<div class="zai-row" style="flex-wrap:wrap;gap:16px;">${html}</div>`;
+
+    // Status badge
+    const badge = document.getElementById('sub-status-badge');
+    if (worstPct >= 100) { badge.textContent = 'EXHAUSTED'; badge.className = 'zai-status-badge zai-badge-danger'; }
+    else if (worstPct >= 80) { badge.textContent = 'LOW'; badge.className = 'zai-status-badge zai-badge-warning'; }
+    else if (worstPct > 0) { badge.textContent = 'OK'; badge.className = 'zai-status-badge zai-badge-ok'; }
+    else { badge.textContent = '—'; badge.className = 'zai-status-badge'; }
+}
+
 // ── Initialize ──
 document.addEventListener('DOMContentLoaded', () => {
     loadOverview();
     loadProviders();
     loadZaiUsage();
+    loadSubscriptionUsage();
     loadActivity();
     loadProviderTokens();
     loadTools();
@@ -527,6 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadSessions();
         loadVoiceStats();
         loadZaiUsage();
+        loadSubscriptionUsage();
     }, 30000);
 
     // Providers: refresh every 60s + button handler
