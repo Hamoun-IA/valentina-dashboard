@@ -616,6 +616,29 @@ async function loadSubscriptionUsage() {
         html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">MiniMax</div>${inner}</div>`;
     }
 
+    // Z.ai Coding Pro (live)
+    const zai = data.zai;
+    if (zai && zai.available) {
+        hasContent = true;
+        let inner = '';
+        if (zai.five_hour?.remaining_percent != null) {
+            worstPct = Math.max(worstPct, 100 - zai.five_hour.remaining_percent);
+            inner += _subBar(zai.five_hour.remaining_percent, '5h restants', zai.five_hour.reset_at ? `reset ${formatTimeFr(zai.five_hour.reset_at)}` : null);
+        }
+        if (zai.weekly?.remaining_percent != null) {
+            worstPct = Math.max(worstPct, 100 - zai.weekly.remaining_percent);
+            inner += _subBar(zai.weekly.remaining_percent, 'Hebdo restants', zai.weekly.reset_at ? `reset ${formatDateTimeFr(zai.weekly.reset_at)}` : null);
+        }
+        if (zai.monthly_search) {
+            const ms = zai.monthly_search;
+            inner += _subBar(100 - (ms.used_percent || 0), 'Web/Search mensuel restant', ms.reset_at ? `reset ${formatDateTimeFr(ms.reset_at)}` : null, `${ms.remaining} / ${ms.total}`);
+        }
+        if (zai.level) {
+            inner += `<div style="font-size:0.72rem;opacity:0.62;margin-top:8px;">plan ${String(zai.level).toUpperCase()}</div>`;
+        }
+        html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">Z.ai</div>${inner}</div>`;
+    }
+
     // Claude Max (live or cached fallback)
     const live = data.claude_live;
     const cc = data.claude_code;
@@ -682,7 +705,7 @@ async function loadSubscriptionUsage() {
     document.getElementById('sub-usage-body').innerHTML = `<div class="zai-row" style="flex-wrap:wrap;gap:16px;">${html}</div>`;
 
     const updatedAtEl = document.getElementById('sub-updated-at');
-    const updatedAt = data.minimax?.fetched_at || data.claude_live?.fetched_at || data.codex?.fetched_at || data.codex?.last_seen_at || data.claude_code?.last_seen_at;
+    const updatedAt = data.zai?.fetched_at || data.minimax?.fetched_at || data.claude_live?.fetched_at || data.codex?.fetched_at || data.codex?.last_seen_at || data.claude_code?.last_seen_at;
     if (updatedAtEl) {
         updatedAtEl.textContent = updatedAt ? `(updated ${formatDateTimeFr(updatedAt, { second: '2-digit' })})` : '';
     }
@@ -699,7 +722,6 @@ async function loadSubscriptionUsage() {
 document.addEventListener('DOMContentLoaded', () => {
     loadOverview();
     loadProviders();
-    loadZaiUsage();
     loadSubscriptionUsage();
     loadActivity();
     loadProviderTokens();
@@ -712,7 +734,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadOverview();
         loadSessions();
         loadVoiceStats();
-        loadZaiUsage();
         loadSubscriptionUsage();
     }, 30000);
 

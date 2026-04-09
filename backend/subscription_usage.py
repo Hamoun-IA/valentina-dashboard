@@ -259,11 +259,13 @@ def get_subscription_usage() -> Dict[str, Any]:
     from backend.claude_live_usage import scrape_claude_live_usage
     from backend.codex_live_usage import get_codex_live_usage
     from backend.minimax_live_usage import get_minimax_live_usage
+    from backend.zai_live_usage import get_zai_live_usage
 
     return {
         "codex": get_codex_live_usage(),
         "codex_local": get_codex_usage(),
         "minimax": get_minimax_live_usage(),
+        "zai": get_zai_live_usage(),
         "claude_code": get_claude_usage(),
         "claude_live": scrape_claude_live_usage(),
     }
