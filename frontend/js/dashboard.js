@@ -601,6 +601,12 @@ async function loadSubscriptionUsage() {
     section.style.display = '';
     document.getElementById('sub-usage-body').innerHTML = `<div class="zai-row" style="flex-wrap:wrap;gap:16px;">${html}</div>`;
 
+    const updatedAtEl = document.getElementById('sub-updated-at');
+    const updatedAt = data.claude_live?.fetched_at || data.codex?.last_seen_at || data.claude_code?.last_seen_at;
+    if (updatedAtEl) {
+        updatedAtEl.textContent = updatedAt ? `(updated ${new Date(updatedAt).toLocaleTimeString()})` : '';
+    }
+
     // Status badge
     const badge = document.getElementById('sub-status-badge');
     if (worstPct >= 100) { badge.textContent = 'EXHAUSTED'; badge.className = 'zai-status-badge zai-badge-danger'; }

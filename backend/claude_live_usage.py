@@ -78,13 +78,13 @@ def _ensure_claude_session() -> str | None:
 
 def _send_usage_and_capture() -> str:
     """Send /usage command and capture the resulting pane text."""
-    # Send Escape first to clear any state, then /usage
-    _tmux_send_keys("Escape")
+    # Send Escape first to clear any transient dialog, then /usage.
+    _run(["tmux", "send-keys", "-t", TMUX_SESSION, "Escape"])
     time.sleep(0.3)
     _run(["tmux", "send-keys", "-t", TMUX_SESSION, "/usage", "Enter"])
     time.sleep(USAGE_RENDER_WAIT)
 
-    # Capture with retries -- sometimes the TUI takes a moment
+    # Capture with retries -- sometimes the TUI takes a moment.
     for attempt in range(CAPTURE_RETRIES):
         text = _tmux_capture()
         if "used" in text.lower() and "reset" in text.lower():
@@ -102,6 +102,27 @@ def _send_usage_and_capture() -> str:
 _PCT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*used", re.IGNORECASE)
 _RESETS_RE = re.compile(r"Resets?\s+(.+?\))", re.IGNORECASE)
 _SPENT_RE = re.compile(r"\$\s*([\d.]+)\s*/\s*\$\s*([\d.]+)\s*spent", re.IGNORECASE)
+
+
+def _clean_raw_excerpt(raw: str) -> str:
+    """Reduce captured tmux noise and keep only the useful /usage block."""
+    lines = [line.rstrip() for line in raw.splitlines() if line.strip()]
+    cleaned: list[str] = []
+    started = False
+    for line in lines:
+        lower = line.lower()
+        if not started and ("status   config   usage   stats" in lower or lower.startswith("current session")):
+            started = True
+        if not started:
+            continue
+        if "status dialog dismissed" in lower:
+            continue
+        if line.strip() == "❯ /usage":
+            continue
+        cleaned.append(line)
+    if not cleaned:
+        cleaned = lines[-25:]
+    return "\n".join(cleaned[-25:])
 
 
 def _parse_section(text: str) -> Dict[str, Any]:
@@ -212,11 +233,9 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
             "raw_excerpt": None,
         }
 
-    # Trim raw to just the interesting part for the response
-    raw_lines = [l for l in raw.splitlines() if l.strip()]
-    raw_excerpt = "\n".join(raw_lines[-40:]) if raw_lines else raw
+    raw_excerpt = _clean_raw_excerpt(raw)
 
-    sections = _parse_usage_output(raw)
+    sections = _parse_usage_output(raw_excerpt)
 
     if not sections:
         return {
