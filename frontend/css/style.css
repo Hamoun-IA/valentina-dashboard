@@ -836,3 +836,86 @@ body::after {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { display: inline-block; animation: spin 0.9s linear infinite; }
+
+/* ── Z.ai Usage Widget ── */
+.zai-usage-section .card-header {
+    margin-bottom: 14px;
+}
+.zai-status-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+.zai-badge-ok {
+    background: rgba(0, 255, 136, 0.12);
+    color: var(--neon-green);
+    border: 1px solid rgba(0, 255, 136, 0.25);
+}
+.zai-badge-warning {
+    background: rgba(255, 215, 0, 0.12);
+    color: var(--neon-yellow);
+    border: 1px solid rgba(255, 215, 0, 0.25);
+}
+.zai-badge-danger {
+    background: rgba(255, 45, 120, 0.12);
+    color: var(--neon-pink);
+    border: 1px solid rgba(255, 45, 120, 0.3);
+}
+.zai-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+.zai-window-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 4px;
+}
+.zai-counts {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--neon-cyan);
+    margin-bottom: 6px;
+}
+.zai-bar-track {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.zai-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+    transition: width 0.6s ease;
+}
+.zai-bar-fill.zai-bar-warning {
+    background: linear-gradient(90deg, var(--neon-yellow), var(--neon-orange));
+    box-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
+}
+.zai-bar-fill.zai-bar-danger {
+    background: linear-gradient(90deg, var(--neon-pink), var(--neon-magenta));
+    box-shadow: 0 0 8px rgba(255, 45, 120, 0.3);
+}
+.zai-meta {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+.zai-footer {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 10px;
+    text-align: right;
+}
+@media (max-width: 480px) {
+    .zai-row { grid-template-columns: 1fr; gap: 14px; }
+}

@@ -129,6 +129,9 @@ function _providerBody(p) {
         if (p.requests_remaining != null) {
             return `<div class="provider-metric">${p.requests_remaining} / ${p.requests_limit || '?'} req</div>`;
         }
+        if (p.remaining_5h != null && p.limit_5h != null) {
+            return `<div class="provider-metric">${p.remaining_5h} / ${p.limit_5h} left</div><div class="provider-sub">${p.used_7d || 0} / ${p.limit_7d || '?'} used (7d)</div>`;
+        }
         return `<div class="provider-sub">${p.note || 'no data'}</div>`;
     }
     return `<div class="provider-sub">—</div>`;
@@ -430,10 +433,88 @@ async function loadVoiceStats() {
     }
 }
 
+// ── Z.ai Usage Widget ──
+function _relativeTime(isoStr) {
+    if (!isoStr) return null;
+    const d = new Date(isoStr);
+    if (isNaN(d)) return null;
+    const diff = d - Date.now();
+    const absDiff = Math.abs(diff);
+    const mins = Math.floor(absDiff / 60000);
+    const hrs = Math.floor(mins / 60);
+    const remainMins = mins % 60;
+    if (diff > 0) {
+        if (hrs > 0) return `resets in ${hrs}h${remainMins > 0 ? remainMins + 'm' : ''}`;
+        return `resets in ${mins}m`;
+    }
+    if (hrs > 0) return `${hrs}h${remainMins}m ago`;
+    if (mins > 0) return `${mins}m ago`;
+    return 'just now';
+}
+
+async function loadZaiUsage() {
+    const data = await fetchAPI('zai/usage');
+    const section = document.getElementById('zai-usage-section');
+    if (!data) {
+        if (section) section.style.display = 'none';
+        return;
+    }
+    if (section) section.style.display = '';
+
+    const used5 = data.used_5h ?? 0;
+    const limit5 = data.limit_5h ?? 0;
+    const used7 = data.used_7d ?? 0;
+    const limit7 = data.limit_7d ?? 0;
+    const remaining5 = data.remaining_5h ?? (limit5 - used5);
+    const pct5 = limit5 > 0 ? Math.min(100, (used5 / limit5) * 100) : 0;
+    const pct7 = limit7 > 0 ? Math.min(100, (used7 / limit7) * 100) : 0;
+
+    document.getElementById('zai-5h-counts').textContent = `${used5} / ${limit5}`;
+    document.getElementById('zai-7d-counts').textContent = `${used7} / ${limit7}`;
+    document.getElementById('zai-5h-bar').style.width = pct5.toFixed(1) + '%';
+    document.getElementById('zai-7d-bar').style.width = pct7.toFixed(1) + '%';
+
+    // color bars by usage
+    const bar5 = document.getElementById('zai-5h-bar');
+    const bar7 = document.getElementById('zai-7d-bar');
+    bar5.className = 'zai-bar-fill' + (pct5 >= 100 ? ' zai-bar-danger' : pct5 >= 80 ? ' zai-bar-warning' : '');
+    bar7.className = 'zai-bar-fill' + (pct7 >= 100 ? ' zai-bar-danger' : pct7 >= 80 ? ' zai-bar-warning' : '');
+
+    // reset times
+    const reset5 = _relativeTime(data.reset_5h_at);
+    const reset7 = _relativeTime(data.reset_7d_at);
+    document.getElementById('zai-5h-reset').textContent = reset5 || '';
+    document.getElementById('zai-7d-reset').textContent = reset7 || '';
+
+    // last call
+    const lastEl = document.getElementById('zai-last-call');
+    if (data.last_call_ts) {
+        const rel = _relativeTime(data.last_call_ts);
+        lastEl.textContent = rel ? `last call: ${rel}` : `last call: ${new Date(data.last_call_ts).toLocaleTimeString()}`;
+    } else {
+        lastEl.textContent = '';
+    }
+
+    // status badge
+    const badge = document.getElementById('zai-status-badge');
+    const pctRemaining = limit5 > 0 ? (remaining5 / limit5) : 1;
+    if (remaining5 <= 0) {
+        badge.textContent = 'EXHAUSTED';
+        badge.className = 'zai-status-badge zai-badge-danger';
+    } else if (pctRemaining <= 0.2) {
+        badge.textContent = 'LOW';
+        badge.className = 'zai-status-badge zai-badge-warning';
+    } else {
+        badge.textContent = 'OK';
+        badge.className = 'zai-status-badge zai-badge-ok';
+    }
+}
+
 // ── Initialize ──
 document.addEventListener('DOMContentLoaded', () => {
     loadOverview();
     loadProviders();
+    loadZaiUsage();
     loadActivity();
     loadProviderTokens();
     loadTools();
@@ -445,6 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadOverview();
         loadSessions();
         loadVoiceStats();
+        loadZaiUsage();
     }, 30000);
 
     // Providers: refresh every 60s + button handler
