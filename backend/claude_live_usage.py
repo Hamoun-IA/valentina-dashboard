@@ -13,12 +13,15 @@ from typing import Any, Dict
 TMUX_SESSION = "claude-usage-scrape"
 WORKING_DIR = "/root/valentina-dashboard"
 CACHE_PATH = Path.home() / ".hermes" / "claude_live_usage_cache.json"
+STATE_PATH = Path.home() / ".hermes" / "claude_live_usage_state.json"
 # Timing
 CLAUDE_STARTUP_WAIT = 4.0
 TRUST_PROMPT_WAIT = 2.0
 USAGE_RENDER_WAIT = 3.0
 CAPTURE_RETRIES = 3
 CAPTURE_RETRY_DELAY = 1.5
+SUCCESS_TTL_SECONDS = 5 * 60
+FAILURE_BACKOFF_SECONDS = 15 * 60
 
 
 def _now_iso() -> str:
@@ -47,7 +50,35 @@ def _save_cached_snapshot(payload: Dict[str, Any]) -> None:
         pass
 
 
+def _load_state() -> Dict[str, Any]:
+    try:
+        if not STATE_PATH.exists():
+            return {}
+        data = json.loads(STATE_PATH.read_text())
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_state(payload: Dict[str, Any]) -> None:
+    try:
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(json.dumps(payload))
+    except Exception:
+        pass
+
+
+def _ts_from_iso(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
 def _with_cache_fallback(fetched_at: str, reason: str, raw_excerpt: str | None) -> Dict[str, Any]:
+    _save_state({"last_failure_at": fetched_at, "last_failure_reason": reason})
     cached = _load_cached_snapshot()
     if cached:
         cached_payload = dict(cached)
@@ -255,6 +286,53 @@ def _parse_usage_output(raw: str) -> Dict[str, Any]:
 def scrape_claude_live_usage() -> Dict[str, Any]:
     """Main entry point: scrape Claude Code /usage and return structured data."""
     fetched_at = _now_iso()
+    now_ts = _ts_from_iso(fetched_at) or time.time()
+    cached = _load_cached_snapshot()
+    state = _load_state()
+
+    cached_ts = _ts_from_iso(cached.get("fetched_at")) if cached else None
+    if cached and cached_ts and (now_ts - cached_ts) < SUCCESS_TTL_SECONDS:
+        cached_payload = dict(cached)
+        cached_payload.update(
+            {
+                "available": True,
+                "stale": False,
+                "live_available": True,
+                "source": "claude_tui_usage_cache",
+                "fetched_at": fetched_at,
+                "cached_fetched_at": cached.get("fetched_at"),
+                "reason": "using recent cached Claude /usage snapshot",
+            }
+        )
+        return cached_payload
+
+    failure_ts = _ts_from_iso(state.get("last_failure_at"))
+    if failure_ts and (now_ts - failure_ts) < FAILURE_BACKOFF_SECONDS:
+        reason = f"Claude /usage backoff active after recent failure: {state.get('last_failure_reason') or 'unknown error'}"
+        if cached:
+            cached_payload = dict(cached)
+            cached_payload.update(
+                {
+                    "available": True,
+                    "stale": True,
+                    "live_available": False,
+                    "source": "claude_tui_usage_cache",
+                    "fetched_at": fetched_at,
+                    "cached_fetched_at": cached.get("fetched_at"),
+                    "reason": reason,
+                    "raw_excerpt": None,
+                }
+            )
+            return cached_payload
+        return {
+            "available": False,
+            "source": "claude_tui_usage",
+            "fetched_at": fetched_at,
+            "reason": reason,
+            "raw_excerpt": None,
+            "stale": False,
+            "live_available": False,
+        }
 
     try:
         err = _ensure_claude_session()
@@ -290,6 +368,7 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
         "extra_usage": sections.get("extra_usage"),
     }
     _save_cached_snapshot(payload)
+    _save_state({"last_success_at": fetched_at, "last_failure_at": None, "last_failure_reason": None})
     return payload
 
 
