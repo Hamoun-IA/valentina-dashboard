@@ -1,4 +1,5 @@
 """Dispatcher: orchestrates all provider monitors with SQLite 5-min cache."""
+
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +17,7 @@ from .fal import FalMonitor
 from .openrouter import OpenRouterMonitor
 from .runpod import RunPodMonitor
 from .tavily import TavilyMonitor
+from .zai_proxy import ZaiProxyMonitor
 
 CACHE_TTL_SECONDS = 300  # 5 minutes
 DB_PATH = Path.home() / ".hermes" / "dashboard.db"
@@ -33,6 +35,7 @@ def build_monitors() -> List[ProviderMonitor]:
         FalMonitor(),
         RunPodMonitor(),
         TavilyMonitor(),
+        ZaiProxyMonitor(),
     ]
 
 
@@ -121,7 +124,10 @@ async def get_live_providers(force: bool = False) -> Dict[str, Any]:
     cache_ok = (
         not force
         and expected_ids.issubset(cache.keys())
-        and all((now - cache[pid]["fetched_at_ts"]) < CACHE_TTL_SECONDS for pid in expected_ids)
+        and all(
+            (now - cache[pid]["fetched_at_ts"]) < CACHE_TTL_SECONDS
+            for pid in expected_ids
+        )
     )
 
     if cache_ok:
@@ -136,7 +142,15 @@ async def get_live_providers(force: bool = False) -> Dict[str, Any]:
         source = "live"
 
     # Stable ordering
-    order = ["deepseek", "openrouter", "elevenlabs", "fal", "runpod", "tavily"]
+    order = [
+        "deepseek",
+        "openrouter",
+        "elevenlabs",
+        "fal",
+        "runpod",
+        "tavily",
+        "zai_proxy",
+    ]
     providers.sort(key=lambda p: order.index(p["id"]) if p.get("id") in order else 999)
 
     return {
