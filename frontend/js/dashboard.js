@@ -154,9 +154,14 @@ function _providerBody(p) {
     }
     if (p.type === 'rate_limits') {
         if (p.requests_remaining != null) {
-            const reset = p.reset_at ? `<div class="provider-sub">reset ${formatTimeFr(p.reset_at)}</div>` : '';
+            const primary = `<div class="provider-metric">${p.requests_remaining} / ${p.requests_limit || '?'} req (5h)</div>`;
+            const weekly = (p.requests_remaining_7d != null)
+                ? `<div class="provider-sub">weekly: ${p.requests_remaining_7d} / ${p.requests_limit_7d || '?'} req</div>`
+                : '';
+            const reset5h = p.reset_at ? `<div class="provider-sub">reset 5h ${formatTimeFr(p.reset_at)}</div>` : '';
+            const reset7d = p.reset_at_7d ? `<div class="provider-sub">reset weekly ${formatDateTimeFr(p.reset_at_7d)}</div>` : '';
             const note = p.note ? `<div class="provider-sub">${p.note}</div>` : '';
-            return `<div class="provider-metric">${p.requests_remaining} / ${p.requests_limit || '?'} req</div>${reset}${note}`;
+            return `${primary}${weekly}${reset5h}${reset7d}${note}`;
         }
         if (p.remaining_5h != null && p.limit_5h != null) {
             return `<div class="provider-metric">${p.remaining_5h} / ${p.limit_5h} left</div><div class="provider-sub">${p.used_7d || 0} / ${p.limit_7d || '?'} used (7d)</div>`;

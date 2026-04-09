@@ -13,7 +13,9 @@ from .base import ProviderMonitor
 
 STATE_DB = Path.home() / ".hermes" / "state.db"
 WINDOW_5H_SECONDS = 5 * 3600
+WINDOW_7D_SECONDS = 7 * 24 * 3600
 LIMIT_5H_REQUESTS = 4500
+LIMIT_7D_REQUESTS = LIMIT_5H_REQUESTS * 10
 
 
 def _collect_minimax_stats() -> Dict[str, Any]:
@@ -28,6 +30,7 @@ def _collect_minimax_stats() -> Dict[str, Any]:
     try:
         now = time.time()
         cutoff_5h = now - WINDOW_5H_SECONDS
+        cutoff_7d = now - WINDOW_7D_SECONDS
 
         where_clause = "(s.billing_provider = 'minimax' OR s.model LIKE 'MiniMax%')"
 
@@ -53,6 +56,30 @@ def _collect_minimax_stats() -> Dict[str, Any]:
               AND m.timestamp >= ?
             """,
             (cutoff_5h,),
+        ).fetchone()[0]
+
+        used_7d = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM messages m
+            JOIN sessions s ON m.session_id = s.id
+            WHERE {where_clause}
+              AND m.role = 'user'
+              AND m.timestamp >= ?
+            """,
+            (cutoff_7d,),
+        ).fetchone()[0]
+
+        oldest_7d = conn.execute(
+            f"""
+            SELECT MIN(m.timestamp)
+            FROM messages m
+            JOIN sessions s ON m.session_id = s.id
+            WHERE {where_clause}
+              AND m.role = 'user'
+              AND m.timestamp >= ?
+            """,
+            (cutoff_7d,),
         ).fetchone()[0]
 
         total_prompts = conn.execute(
@@ -98,11 +125,15 @@ def _collect_minimax_stats() -> Dict[str, Any]:
             "requests_remaining": max(0, LIMIT_5H_REQUESTS - int(used_5h or 0)),
             "requests_limit": LIMIT_5H_REQUESTS,
             "reset_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime((oldest_5h or now) + WINDOW_5H_SECONDS)) if oldest_5h else None,
+            "requests_used_7d": int(used_7d or 0),
+            "requests_remaining_7d": max(0, LIMIT_7D_REQUESTS - int(used_7d or 0)),
+            "requests_limit_7d": LIMIT_7D_REQUESTS,
+            "reset_at_7d": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime((oldest_7d or now) + WINDOW_7D_SECONDS)) if oldest_7d else None,
             "session_count": int(session_count or 0),
             "total_prompts": int(total_prompts or 0),
             "last_seen_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(last_seen)) if last_seen else None,
             "models": {row[0] or "unknown": row[1] for row in models},
-            "note": "local prompt tracker · MiniMax n'expose pas d'API de quota publique",
+            "note": "tracker local Hermes · docs MiniMax: weekly quota = 10× le quota 5h pour les nouveaux plans",
         }
     finally:
         conn.close()
