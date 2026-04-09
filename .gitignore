@@ -7,3 +7,10 @@ __pycache__/
 # Large 3D model files (downloaded/generated separately)
 frontend/assets/models/*.vrm
 frontend/assets/models/*.glb
+
+# Codex CLI
+.codex
+.codex/
+
+# Local data
+data/*.db
