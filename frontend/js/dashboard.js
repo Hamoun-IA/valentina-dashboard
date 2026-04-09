@@ -679,11 +679,21 @@ async function loadSubscriptionUsage() {
             inner += `<div style="font-size:0.76rem;opacity:0.7;margin-top:6px;">Local 5h: ${formatNumber(cc.assistant_messages_5h || 0)} msgs · ${formatNumber(totalTok)} tok</div>`;
         }
         const liveMeta = [];
-        if (live?.stale && live.cached_fetched_at) {
-            liveMeta.push(`cache ${formatDateTimeFr(live.cached_fetched_at, { second: '2-digit' })}`);
+        if (live?.backoff_active) {
+            const retryMins = Math.ceil((live.retry_in_seconds || 0) / 60);
+            const retryTime = live.retry_at ? formatTimeFr(live.retry_at) : '';
+            if (retryMins > 0) {
+                if (retryTime) {
+                    liveMeta.push(`live en pause ${retryMins} min (reprise ${retryTime})`);
+                } else {
+                    liveMeta.push(`live en pause ${retryMins} min`);
+                }
+            } else {
+                liveMeta.push('live en pause');
+            }
         }
-        if (live?.reason && !live.live_available) {
-            liveMeta.push('live indispo');
+        if (live?.stale && live.cached_fetched_at && !live.live_available) {
+            liveMeta.push(`cache ${formatDateTimeFr(live.cached_fetched_at, { second: '2-digit' })}`);
         }
         if (liveMeta.length) {
             inner += `<div style="font-size:0.72rem;opacity:0.58;margin-top:8px;">${liveMeta.join(' · ')}</div>`;

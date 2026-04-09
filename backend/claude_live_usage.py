@@ -1,4 +1,5 @@
 """Scrape Claude Code /usage TUI via tmux for live subscription quota data."""
+
 from __future__ import annotations
 
 import re
@@ -77,9 +78,18 @@ def _ts_from_iso(value: str | None) -> float | None:
         return None
 
 
-def _with_cache_fallback(fetched_at: str, reason: str, raw_excerpt: str | None) -> Dict[str, Any]:
+def _with_cache_fallback(
+    fetched_at: str, reason: str, raw_excerpt: str | None
+) -> Dict[str, Any]:
     _save_state({"last_failure_at": fetched_at, "last_failure_reason": reason})
     cached = _load_cached_snapshot()
+    now_ts = _ts_from_iso(fetched_at) or time.time()
+    failure_ts = _ts_from_iso(fetched_at)
+    retry_in_seconds = FAILURE_BACKOFF_SECONDS - (now_ts - (failure_ts or now_ts))
+    retry_at_iso = _now_iso()
+    if retry_in_seconds > 0:
+        retry_dt = datetime.fromtimestamp(now_ts + retry_in_seconds, tz=timezone.utc)
+        retry_at_iso = retry_dt.isoformat().replace("+00:00", "Z")
     if cached:
         cached_payload = dict(cached)
         cached_payload.update(
@@ -92,6 +102,9 @@ def _with_cache_fallback(fetched_at: str, reason: str, raw_excerpt: str | None) 
                 "cached_fetched_at": cached.get("fetched_at"),
                 "reason": reason,
                 "raw_excerpt": raw_excerpt,
+                "backoff_active": True,
+                "retry_in_seconds": max(0, int(retry_in_seconds)),
+                "retry_at": retry_at_iso,
             }
         )
         return cached_payload
@@ -104,6 +117,9 @@ def _with_cache_fallback(fetched_at: str, reason: str, raw_excerpt: str | None) 
         "raw_excerpt": raw_excerpt,
         "stale": False,
         "live_available": False,
+        "backoff_active": True,
+        "retry_in_seconds": max(0, int(retry_in_seconds)),
+        "retry_at": retry_at_iso,
     }
 
 
@@ -141,20 +157,42 @@ def _ensure_claude_session() -> str | None:
         return None
 
     # Create new session running claude
-    r = _run([
-        "tmux", "new-session", "-d", "-s", TMUX_SESSION,
-        "-x", "200", "-y", "50",
-    ])
+    r = _run(
+        [
+            "tmux",
+            "new-session",
+            "-d",
+            "-s",
+            TMUX_SESSION,
+            "-x",
+            "200",
+            "-y",
+            "50",
+        ]
+    )
     if r.returncode != 0:
         return f"tmux new-session failed: {r.stderr.strip()}"
 
     # Start claude inside the session
-    _run(["tmux", "send-keys", "-t", TMUX_SESSION, f"cd {WORKING_DIR} && claude", "Enter"])
+    _run(
+        [
+            "tmux",
+            "send-keys",
+            "-t",
+            TMUX_SESSION,
+            f"cd {WORKING_DIR} && claude",
+            "Enter",
+        ]
+    )
     time.sleep(CLAUDE_STARTUP_WAIT)
 
     # Handle possible trust/workspace prompt -- press Enter to accept default
     pane_text = _tmux_capture()
-    if "trust" in pane_text.lower() or "workspace" in pane_text.lower() or "?" in pane_text:
+    if (
+        "trust" in pane_text.lower()
+        or "workspace" in pane_text.lower()
+        or "?" in pane_text
+    ):
         _tmux_send_enter()
         time.sleep(TRUST_PROMPT_WAIT)
 
@@ -196,7 +234,10 @@ def _clean_raw_excerpt(raw: str) -> str:
     started = False
     for line in lines:
         lower = line.lower()
-        if not started and ("status   config   usage   stats" in lower or lower.startswith("current session")):
+        if not started and (
+            "status   config   usage   stats" in lower
+            or lower.startswith("current session")
+        ):
             started = True
         if not started:
             continue
@@ -233,7 +274,10 @@ def _parse_section(text: str) -> Dict[str, Any]:
 # Patterns to identify which section a line belongs to
 _SECTION_PATTERNS = [
     ("current_session", re.compile(r"current\s+session", re.IGNORECASE)),
-    ("current_week_all_models", re.compile(r"current\s+week\s*\(all\s+models\)", re.IGNORECASE)),
+    (
+        "current_week_all_models",
+        re.compile(r"current\s+week\s*\(all\s+models\)", re.IGNORECASE),
+    ),
     ("current_week_sonnet", re.compile(r"current\s+week\s*\(sonnet", re.IGNORECASE)),
     ("extra_usage", re.compile(r"extra\s+usage", re.IGNORECASE)),
 ]
@@ -283,6 +327,7 @@ def _parse_usage_output(raw: str) -> Dict[str, Any]:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def scrape_claude_live_usage() -> Dict[str, Any]:
     """Main entry point: scrape Claude Code /usage and return structured data."""
     fetched_at = _now_iso()
@@ -302,6 +347,8 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
                 "fetched_at": fetched_at,
                 "cached_fetched_at": cached.get("fetched_at"),
                 "reason": "using recent cached Claude /usage snapshot",
+                "cached": True,
+                "backoff_active": False,
             }
         )
         return cached_payload
@@ -309,6 +356,9 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
     failure_ts = _ts_from_iso(state.get("last_failure_at"))
     if failure_ts and (now_ts - failure_ts) < FAILURE_BACKOFF_SECONDS:
         reason = f"Claude /usage backoff active after recent failure: {state.get('last_failure_reason') or 'unknown error'}"
+        retry_in_seconds = int(FAILURE_BACKOFF_SECONDS - (now_ts - failure_ts))
+        retry_dt = datetime.fromtimestamp(now_ts + retry_in_seconds, tz=timezone.utc)
+        retry_at_iso = retry_dt.isoformat().replace("+00:00", "Z")
         if cached:
             cached_payload = dict(cached)
             cached_payload.update(
@@ -321,6 +371,9 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
                     "cached_fetched_at": cached.get("fetched_at"),
                     "reason": reason,
                     "raw_excerpt": None,
+                    "backoff_active": True,
+                    "retry_in_seconds": retry_in_seconds,
+                    "retry_at": retry_at_iso,
                 }
             )
             return cached_payload
@@ -332,12 +385,17 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
             "raw_excerpt": None,
             "stale": False,
             "live_available": False,
+            "backoff_active": True,
+            "retry_in_seconds": retry_in_seconds,
+            "retry_at": retry_at_iso,
         }
 
     try:
         err = _ensure_claude_session()
     except (subprocess.TimeoutExpired, OSError) as exc:
-        return _with_cache_fallback(fetched_at, f"failed to set up tmux session: {exc}", None)
+        return _with_cache_fallback(
+            fetched_at, f"failed to set up tmux session: {exc}", None
+        )
 
     if err:
         return _with_cache_fallback(fetched_at, err, None)
@@ -345,14 +403,20 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
     try:
         raw = _send_usage_and_capture()
     except (subprocess.TimeoutExpired, OSError) as exc:
-        return _with_cache_fallback(fetched_at, f"failed to capture usage output: {exc}", None)
+        return _with_cache_fallback(
+            fetched_at, f"failed to capture usage output: {exc}", None
+        )
 
     raw_excerpt = _clean_raw_excerpt(raw)
 
     sections = _parse_usage_output(raw_excerpt)
 
     if not sections:
-        return _with_cache_fallback(fetched_at, "could not parse any usage sections from TUI output", raw_excerpt)
+        return _with_cache_fallback(
+            fetched_at,
+            "could not parse any usage sections from TUI output",
+            raw_excerpt,
+        )
 
     payload = {
         "available": True,
@@ -366,13 +430,21 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
         "current_week_all_models": sections.get("current_week_all_models"),
         "current_week_sonnet": sections.get("current_week_sonnet"),
         "extra_usage": sections.get("extra_usage"),
+        "backoff_active": False,
     }
     _save_cached_snapshot(payload)
-    _save_state({"last_success_at": fetched_at, "last_failure_at": None, "last_failure_reason": None})
+    _save_state(
+        {
+            "last_success_at": fetched_at,
+            "last_failure_at": None,
+            "last_failure_reason": None,
+        }
+    )
     return payload
 
 
 if __name__ == "__main__":
     import json as _json
+
     result = scrape_claude_live_usage()
     print(_json.dumps(result, indent=2))
