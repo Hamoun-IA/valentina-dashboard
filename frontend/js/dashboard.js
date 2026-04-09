@@ -603,12 +603,14 @@ async function loadSubscriptionUsage() {
         hasContent = true;
         let inner = '';
         if (minimax.primary_remaining_percent != null) {
-            worstPct = Math.max(worstPct, 100 - minimax.primary_remaining_percent);
-            inner += _subBar(minimax.primary_remaining_percent, '5h restants', minimax.primary_reset_at ? `reset ${formatTimeFr(minimax.primary_reset_at)}` : null);
+            const usedPct = 100 - minimax.primary_remaining_percent;
+            worstPct = Math.max(worstPct, usedPct);
+            inner += _subBar(usedPct, '5h used', minimax.primary_reset_at ? `reset ${formatTimeFr(minimax.primary_reset_at)}` : null);
         }
         if (minimax.secondary_remaining_percent != null) {
-            worstPct = Math.max(worstPct, 100 - minimax.secondary_remaining_percent);
-            inner += _subBar(minimax.secondary_remaining_percent, 'Hebdo restants', minimax.secondary_reset_at ? `reset ${formatDateTimeFr(minimax.secondary_reset_at)}` : null);
+            const usedPct = 100 - minimax.secondary_remaining_percent;
+            worstPct = Math.max(worstPct, usedPct);
+            inner += _subBar(usedPct, 'Weekly used', minimax.secondary_reset_at ? `reset ${formatDateTimeFr(minimax.secondary_reset_at)}` : null);
         }
         if (minimax.model_name) {
             inner += `<div style="font-size:0.72rem;opacity:0.62;margin-top:8px;">${minimax.model_name}</div>`;
@@ -622,16 +624,19 @@ async function loadSubscriptionUsage() {
         hasContent = true;
         let inner = '';
         if (zai.five_hour?.remaining_percent != null) {
-            worstPct = Math.max(worstPct, 100 - zai.five_hour.remaining_percent);
-            inner += _subBar(zai.five_hour.remaining_percent, '5h restants', zai.five_hour.reset_at ? `reset ${formatTimeFr(zai.five_hour.reset_at)}` : null);
+            const usedPct = 100 - zai.five_hour.remaining_percent;
+            worstPct = Math.max(worstPct, usedPct);
+            inner += _subBar(usedPct, '5h used', zai.five_hour.reset_at ? `reset ${formatTimeFr(zai.five_hour.reset_at)}` : null);
         }
         if (zai.weekly?.remaining_percent != null) {
-            worstPct = Math.max(worstPct, 100 - zai.weekly.remaining_percent);
-            inner += _subBar(zai.weekly.remaining_percent, 'Hebdo restants', zai.weekly.reset_at ? `reset ${formatDateTimeFr(zai.weekly.reset_at)}` : null);
+            const usedPct = 100 - zai.weekly.remaining_percent;
+            worstPct = Math.max(worstPct, usedPct);
+            inner += _subBar(usedPct, 'Weekly used', zai.weekly.reset_at ? `reset ${formatDateTimeFr(zai.weekly.reset_at)}` : null);
         }
         if (zai.monthly_search) {
             const ms = zai.monthly_search;
-            inner += _subBar(100 - (ms.used_percent || 0), 'Web/Search mensuel restant', ms.reset_at ? `reset ${formatDateTimeFr(ms.reset_at)}` : null, `${ms.remaining} / ${ms.total}`);
+            worstPct = Math.max(worstPct, ms.used_percent || 0);
+            inner += _subBar(ms.used_percent || 0, 'Web/Search mensuel used', ms.reset_at ? `reset ${formatDateTimeFr(ms.reset_at)}` : null, `${ms.used} / ${ms.total}`);
         }
         if (zai.level) {
             inner += `<div style="font-size:0.72rem;opacity:0.62;margin-top:8px;">plan ${String(zai.level).toUpperCase()}</div>`;
