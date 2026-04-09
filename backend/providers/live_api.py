@@ -13,7 +13,6 @@ from .base import ProviderMonitor
 from .deepseek import DeepSeekMonitor
 from .elevenlabs import ElevenLabsMonitor
 from .fal import FalMonitor
-from .minimax import MiniMaxMonitor
 from .openrouter import OpenRouterMonitor
 from .runpod import RunPodMonitor
 from .tavily import TavilyMonitor
@@ -35,7 +34,6 @@ def build_monitors() -> List[ProviderMonitor]:
         FalMonitor(),
         RunPodMonitor(),
         TavilyMonitor(),
-        MiniMaxMonitor(),
         ZaiProxyMonitor(),
     ]
 
@@ -140,7 +138,7 @@ async def get_live_providers(force: bool = False) -> Dict[str, Any]:
         source = "live"
 
     # Stable ordering
-    order = ["deepseek", "openrouter", "elevenlabs", "fal", "runpod", "tavily", "minimax", "zai"]
+    order = ["deepseek", "openrouter", "elevenlabs", "fal", "runpod", "tavily", "zai"]
     providers.sort(key=lambda p: order.index(p["id"]) if p.get("id") in order else 999)
 
     return {

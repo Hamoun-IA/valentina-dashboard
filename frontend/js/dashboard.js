@@ -597,6 +597,25 @@ async function loadSubscriptionUsage() {
         }
     }
 
+    // MiniMax Token Plan (live)
+    const minimax = data.minimax;
+    if (minimax && minimax.available) {
+        hasContent = true;
+        let inner = '';
+        if (minimax.primary_remaining_percent != null) {
+            worstPct = Math.max(worstPct, 100 - minimax.primary_remaining_percent);
+            inner += _subBar(minimax.primary_remaining_percent, '5h restants', minimax.primary_reset_at ? `reset ${formatTimeFr(minimax.primary_reset_at)}` : null);
+        }
+        if (minimax.secondary_remaining_percent != null) {
+            worstPct = Math.max(worstPct, 100 - minimax.secondary_remaining_percent);
+            inner += _subBar(minimax.secondary_remaining_percent, 'Hebdo restants', minimax.secondary_reset_at ? `reset ${formatDateTimeFr(minimax.secondary_reset_at)}` : null);
+        }
+        if (minimax.model_name) {
+            inner += `<div style="font-size:0.72rem;opacity:0.62;margin-top:8px;">${minimax.model_name}</div>`;
+        }
+        html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">MiniMax</div>${inner}</div>`;
+    }
+
     // Claude Max (live or cached fallback)
     const live = data.claude_live;
     const cc = data.claude_code;
@@ -663,7 +682,7 @@ async function loadSubscriptionUsage() {
     document.getElementById('sub-usage-body').innerHTML = `<div class="zai-row" style="flex-wrap:wrap;gap:16px;">${html}</div>`;
 
     const updatedAtEl = document.getElementById('sub-updated-at');
-    const updatedAt = data.claude_live?.fetched_at || data.codex?.last_seen_at || data.claude_code?.last_seen_at;
+    const updatedAt = data.minimax?.fetched_at || data.claude_live?.fetched_at || data.codex?.fetched_at || data.codex?.last_seen_at || data.claude_code?.last_seen_at;
     if (updatedAtEl) {
         updatedAtEl.textContent = updatedAt ? `(updated ${formatDateTimeFr(updatedAt, { second: '2-digit' })})` : '';
     }
