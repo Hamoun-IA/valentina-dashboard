@@ -300,3 +300,8 @@ def voice():
 @app.get("/avatar")
 def avatar():
     return FileResponse(str(frontend_dir / "avatar.html"))
+
+
+@app.get("/stack")
+def stack_docs():
+    return FileResponse(str(frontend_dir / "docs.html"))

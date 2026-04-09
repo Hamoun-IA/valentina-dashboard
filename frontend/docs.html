@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#00f0ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/assets/icon-192.png">
+    <title>Valentina — Docs</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+    <a href="/" class="logo">VALENTINA</a>
+    <button class="nav-toggle" aria-label="Menu" onclick="document.querySelector('.nav-links').classList.toggle('open')"><span></span></button>
+    <ul class="nav-links">
+        <li><a href="/">Dashboard</a></li>
+        <li><a href="/voice">Voice Chat</a></li>
+        <li><a href="/avatar">Avatar 3D</a></li>
+        <li><a href="/stack" class="active">Docs</a></li>
+    </ul>
+</nav>
+
+<div class="dashboard">
+    <header class="header glass animate-in">
+        <div class="header-brand">
+            <div class="header-logo">D</div>
+            <div>
+                <div class="header-title">VALENTINA DOCS</div>
+                <div class="header-subtitle">La stack, les choix, la ligne à suivre</div>
+            </div>
+        </div>
+        <div class="header-status">
+            <div class="status-dot"></div>
+            <span>VERSION COURTE, PAS DE BLABLA</span>
+        </div>
+    </header>
+
+    <section class="card glass animate-in delay-1" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <div class="card-title"><span class="icon">🧠</span>STACK PERMANENTE</div>
+        </div>
+        <div style="display:grid; gap:14px;">
+            <div><strong>Codex Spark</strong> — cerveau, gros code, archi, debug sale, review finale.</div>
+            <div><strong>Z.ai</strong> — assistant code, exécution, refactors mécaniques, worker parallèle.</div>
+            <div><strong>ElevenLabs</strong> — voix, TTS, tout ce qui touche au vocal.</div>
+            <div><strong>FAL.ai</strong> — médias rapides : photos, images, vidéos, prototypage créatif.</div>
+            <div><strong>RunPod</strong> — GPU, jobs lourds, pipelines, infra contrôlée.</div>
+            <div><strong>OpenRouter</strong> — centre API pour les besoins spécifiques et les modèles ponctuels.</div>
+        </div>
+    </section>
+
+    <section class="card glass animate-in delay-2" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <div class="card-title"><span class="icon">⏳</span>OPPORTUNITÉS TEMPORAIRES</div>
+        </div>
+        <div style="display:grid; gap:14px;">
+            <div><strong>Gemini</strong> — crédits à cramer intelligemment, surtout image et tests ciblés.</div>
+            <div><strong>Grok / xAI</strong> — veille X/Twitter temps réel tant qu'il reste du crédit.</div>
+        </div>
+    </section>
+
+    <section class="card glass animate-in delay-3" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <div class="card-title"><span class="icon">✂️</span>À COUPER</div>
+        </div>
+        <div style="display:grid; gap:14px;">
+            <div><strong>MiniMax</strong> — intéressant mais trop redondant si pas d'avantage massif.</div>
+            <div><strong>Claude abonnement</strong> — plus assez cohérent, surtout avec le délire anti 3rd harness.</div>
+        </div>
+    </section>
+
+    <section class="card glass animate-in delay-4" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <div class="card-title"><span class="icon">🎯</span>DOCTRINE DE DISPATCH</div>
+        </div>
+        <div style="display:grid; gap:14px;">
+            <div><strong>Penser fort / coder critique</strong> → Codex Spark</div>
+            <div><strong>Coding rentable / délégation d'exécution</strong> → Z.ai</div>
+            <div><strong>Voix</strong> → ElevenLabs</div>
+            <div><strong>Média rapide</strong> → FAL.ai</div>
+            <div><strong>GPU ou gros pipeline</strong> → RunPod</div>
+            <div><strong>Modèle spécifique ponctuel</strong> → OpenRouter</div>
+            <div><strong>Crédits ou bonus temporaires</strong> → Gemini / xAI</div>
+        </div>
+    </section>
+
+    <section class="card glass animate-in delay-5" style="margin-bottom: 24px;">
+        <div class="card-header">
+            <div class="card-title"><span class="icon">📝</span>RÈGLE D'OR</div>
+        </div>
+        <div style="line-height:1.7; color: var(--text-secondary);">
+            Chaque provider doit avoir un vrai rôle. Si un truc n'apporte ni meilleure qualité, ni meilleur coût, ni meilleur confort, il dégage. Pas de collection d'abonnements comme un débile sous caféine.
+        </div>
+    </section>
+
+    <footer class="footer">
+        VALENTINA DOCS — court, utile, sans roman inutile 🔮
+    </footer>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>

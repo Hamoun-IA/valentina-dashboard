@@ -1,7 +1,8 @@
-const CACHE_NAME = 'valentina-v2.2';
+const CACHE_NAME = 'valentina-v2.3';
 const STATIC_ASSETS = [
   '/',
   '/voice',
+  '/stack',
   '/css/style.css',
   '/css/voice.css',
   '/js/dashboard.js',
