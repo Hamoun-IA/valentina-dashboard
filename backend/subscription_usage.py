@@ -257,9 +257,11 @@ def get_claude_usage() -> Dict[str, Any]:
 def get_subscription_usage() -> Dict[str, Any]:
     """Return local subscription-usage telemetry for Codex, Claude Code, and live Claude quota."""
     from backend.claude_live_usage import scrape_claude_live_usage
+    from backend.codex_live_usage import get_codex_live_usage
 
     return {
-        "codex": get_codex_usage(),
+        "codex": get_codex_live_usage(),
+        "codex_local": get_codex_usage(),
         "claude_code": get_claude_usage(),
         "claude_live": scrape_claude_live_usage(),
     }

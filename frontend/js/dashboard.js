@@ -533,21 +533,30 @@ async function loadSubscriptionUsage() {
     let hasContent = false;
     let worstPct = 0;
 
-    // Codex Plus
+    // Codex Plus (live)
     const codex = data.codex;
     if (codex && codex.available) {
         hasContent = true;
         let inner = '';
-        if (codex.primary_used_percent != null) {
-            worstPct = Math.max(worstPct, codex.primary_used_percent);
-            inner += _subBar(codex.primary_used_percent, 'Rolling 5h', codex.primary_resets_at ? _relativeTime(codex.primary_resets_at) : null);
+        if (codex.primary_remaining_percent != null) {
+            worstPct = Math.max(worstPct, 100 - codex.primary_remaining_percent);
+            inner += _subBar(codex.primary_remaining_percent, '5h restants', codex.primary_resets_at ? `reset ${new Date(codex.primary_resets_at).toLocaleTimeString()}` : null);
         }
-        if (codex.secondary_used_percent != null) {
-            worstPct = Math.max(worstPct, codex.secondary_used_percent);
-            inner += _subBar(codex.secondary_used_percent, 'Weekly', codex.secondary_resets_at ? _relativeTime(codex.secondary_resets_at) : null);
+        if (codex.secondary_remaining_percent != null) {
+            worstPct = Math.max(worstPct, 100 - codex.secondary_remaining_percent);
+            inner += _subBar(codex.secondary_remaining_percent, 'Hebdo restants', codex.secondary_resets_at ? `reset ${new Date(codex.secondary_resets_at).toLocaleString()}` : null);
+        }
+        const reviewLimit = codex.rate_limits_by_limit_id && (codex.rate_limits_by_limit_id.review || codex.rate_limits_by_limit_id.code_review || codex.rate_limits_by_limit_id.codex_review);
+        if (reviewLimit && reviewLimit.primary_remaining_percent != null) {
+            worstPct = Math.max(worstPct, 100 - reviewLimit.primary_remaining_percent);
+            inner += _subBar(reviewLimit.primary_remaining_percent, 'Revue code', reviewLimit.primary_resets_at ? `reset ${new Date(reviewLimit.primary_resets_at).toLocaleString()}` : null);
+        }
+        if (codex.credits) {
+            const balance = codex.credits.balance ?? '—';
+            inner += `<div style="font-size:0.78rem;opacity:0.78;margin-top:8px;">Crédits restants: <strong>${balance}</strong></div>`;
         }
         if (inner) {
-            html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">Codex Plus</div>${inner}</div>`;
+            html += `<div class="zai-window" style="flex:1;min-width:240px;"><div class="zai-window-label">Codex Plus</div>${inner}</div>`;
         }
     }
 
