@@ -576,12 +576,14 @@ async function loadSubscriptionUsage() {
         hasContent = true;
         let inner = '';
         if (codex.primary_remaining_percent != null) {
-            worstPct = Math.max(worstPct, 100 - codex.primary_remaining_percent);
-            inner += _subBar(codex.primary_remaining_percent, '5h restants', codex.primary_resets_at ? `reset ${formatTimeFr(codex.primary_resets_at)}` : null);
+            const usedPct = 100 - codex.primary_remaining_percent;
+            worstPct = Math.max(worstPct, usedPct);
+            inner += _subBar(usedPct, '5h used', codex.primary_resets_at ? `reset ${formatTimeFr(codex.primary_resets_at)}` : null);
         }
         if (codex.secondary_remaining_percent != null) {
-            worstPct = Math.max(worstPct, 100 - codex.secondary_remaining_percent);
-            inner += _subBar(codex.secondary_remaining_percent, 'Hebdo restants', codex.secondary_resets_at ? `reset ${formatDateTimeFr(codex.secondary_resets_at)}` : null);
+            const usedPct = 100 - codex.secondary_remaining_percent;
+            worstPct = Math.max(worstPct, usedPct);
+            inner += _subBar(usedPct, 'Weekly used', codex.secondary_resets_at ? `reset ${formatDateTimeFr(codex.secondary_resets_at)}` : null);
         }
         const reviewLimit = codex.rate_limits_by_limit_id && (codex.rate_limits_by_limit_id.review || codex.rate_limits_by_limit_id.code_review || codex.rate_limits_by_limit_id.codex_review);
         if (reviewLimit && reviewLimit.primary_remaining_percent != null) {
@@ -602,15 +604,13 @@ async function loadSubscriptionUsage() {
     if (minimax && minimax.available) {
         hasContent = true;
         let inner = '';
-        if (minimax.primary_remaining_percent != null) {
-            const usedPct = 100 - minimax.primary_remaining_percent;
-            worstPct = Math.max(worstPct, usedPct);
-            inner += _subBar(usedPct, '5h used', minimax.primary_reset_at ? `reset ${formatTimeFr(minimax.primary_reset_at)}` : null);
+        if (minimax.primary_used_percent != null) {
+            worstPct = Math.max(worstPct, minimax.primary_used_percent);
+            inner += _subBar(minimax.primary_used_percent, '5h used', minimax.primary_reset_at ? `reset ${formatTimeFr(minimax.primary_reset_at)}` : null);
         }
-        if (minimax.secondary_remaining_percent != null) {
-            const usedPct = 100 - minimax.secondary_remaining_percent;
-            worstPct = Math.max(worstPct, usedPct);
-            inner += _subBar(usedPct, 'Weekly used', minimax.secondary_reset_at ? `reset ${formatDateTimeFr(minimax.secondary_reset_at)}` : null);
+        if (minimax.secondary_used_percent != null) {
+            worstPct = Math.max(worstPct, minimax.secondary_used_percent);
+            inner += _subBar(minimax.secondary_used_percent, 'Weekly used', minimax.secondary_reset_at ? `reset ${formatDateTimeFr(minimax.secondary_reset_at)}` : null);
         }
         if (minimax.model_name) {
             inner += `<div style="font-size:0.72rem;opacity:0.62;margin-top:8px;">${minimax.model_name}</div>`;

@@ -34,22 +34,27 @@ def _pick_primary_bucket(model_remains: list[dict[str, Any]]) -> dict[str, Any] 
 
 def _normalize_bucket(row: dict[str, Any]) -> dict[str, Any]:
     interval_total = int(row.get("current_interval_total_count") or 0)
-    interval_used = int(row.get("current_interval_usage_count") or 0)
     weekly_total = int(row.get("current_weekly_total_count") or 0)
-    weekly_used = int(row.get("current_weekly_usage_count") or 0)
-    interval_remaining = max(0, interval_total - interval_used)
-    weekly_remaining = max(0, weekly_total - weekly_used)
+
+    # MiniMax's field naming is misleading here: the dashboard endpoint returns the
+    # remaining count in `*_usage_count`, while the UI itself shows % used.
+    interval_remaining = int(row.get("current_interval_usage_count") or 0)
+    weekly_remaining = int(row.get("current_weekly_usage_count") or 0)
+    interval_used = max(0, interval_total - interval_remaining)
+    weekly_used = max(0, weekly_total - weekly_remaining)
 
     return {
         "model_name": row.get("model_name"),
         "primary_total": interval_total,
         "primary_used": interval_used,
         "primary_remaining": interval_remaining,
+        "primary_used_percent": (interval_used / interval_total * 100.0) if interval_total > 0 else None,
         "primary_remaining_percent": (interval_remaining / interval_total * 100.0) if interval_total > 0 else None,
         "primary_reset_at": _iso_from_ms(row.get("end_time")),
         "secondary_total": weekly_total,
         "secondary_used": weekly_used,
         "secondary_remaining": weekly_remaining,
+        "secondary_used_percent": (weekly_used / weekly_total * 100.0) if weekly_total > 0 else None,
         "secondary_remaining_percent": (weekly_remaining / weekly_total * 100.0) if weekly_total > 0 else None,
         "secondary_reset_at": _iso_from_ms(row.get("weekly_end_time")),
         "raw": row,
