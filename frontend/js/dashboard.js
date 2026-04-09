@@ -98,6 +98,7 @@ const PROVIDER_META = {
     fal:        { icon: '🎨', color: 'var(--neon-magenta)' },
     runpod:     { icon: '🖥️', color: 'var(--neon-cyan)'    },
     tavily:     { icon: '🔎', color: 'var(--neon-violet)'  },
+    minimax:    { icon: '🔮', color: 'var(--neon-violet)'  },
     zai:        { icon: '🧠', color: 'var(--neon-cyan)'    },
 };
 
@@ -153,7 +154,9 @@ function _providerBody(p) {
     }
     if (p.type === 'rate_limits') {
         if (p.requests_remaining != null) {
-            return `<div class="provider-metric">${p.requests_remaining} / ${p.requests_limit || '?'} req</div>`;
+            const reset = p.reset_at ? `<div class="provider-sub">reset ${formatTimeFr(p.reset_at)}</div>` : '';
+            const note = p.note ? `<div class="provider-sub">${p.note}</div>` : '';
+            return `<div class="provider-metric">${p.requests_remaining} / ${p.requests_limit || '?'} req</div>${reset}${note}`;
         }
         if (p.remaining_5h != null && p.limit_5h != null) {
             return `<div class="provider-metric">${p.remaining_5h} / ${p.limit_5h} left</div><div class="provider-sub">${p.used_7d || 0} / ${p.limit_7d || '?'} used (7d)</div>`;
@@ -169,6 +172,9 @@ function _isLow(p) {
     }
     if (p.type === 'quota_chars' && p.limit > 0) {
         return ((p.limit - p.used) / p.limit) < 0.2;
+    }
+    if (p.type === 'rate_limits' && p.requests_limit > 0 && p.requests_remaining != null) {
+        return (p.requests_remaining / p.requests_limit) < 0.2;
     }
     return false;
 }
@@ -586,24 +592,25 @@ async function loadSubscriptionUsage() {
         }
     }
 
-    // Claude Max (live)
+    // Claude Max (live or cached fallback)
     const live = data.claude_live;
-    if (live && live.available) {
+    const cc = data.claude_code;
+    if (live && (live.available || cc?.available)) {
         hasContent = true;
         let inner = '';
-        if (live.current_session && live.current_session.used_percent != null) {
+        if (live?.current_session && live.current_session.used_percent != null) {
             worstPct = Math.max(worstPct, live.current_session.used_percent);
             inner += _subBar(live.current_session.used_percent, 'Session', live.current_session.resets_text || null);
         }
-        if (live.current_week_all_models && live.current_week_all_models.used_percent != null) {
+        if (live?.current_week_all_models && live.current_week_all_models.used_percent != null) {
             worstPct = Math.max(worstPct, live.current_week_all_models.used_percent);
             inner += _subBar(live.current_week_all_models.used_percent, 'Week (all)', live.current_week_all_models.resets_text || null);
         }
-        if (live.current_week_sonnet && live.current_week_sonnet.used_percent != null) {
+        if (live?.current_week_sonnet && live.current_week_sonnet.used_percent != null) {
             worstPct = Math.max(worstPct, live.current_week_sonnet.used_percent);
             inner += _subBar(live.current_week_sonnet.used_percent, 'Week (Sonnet)', live.current_week_sonnet.resets_text || null);
         }
-        if (live.extra_usage) {
+        if (live?.extra_usage) {
             const eu = live.extra_usage;
             const spendLine = eu.spent_usd != null && eu.limit_usd != null
                 ? `$${eu.spent_usd.toFixed(2)} / $${eu.limit_usd.toFixed(2)}`
@@ -614,13 +621,27 @@ async function loadSubscriptionUsage() {
                 inner += `<div style="font-size:0.75rem;opacity:0.7;margin-top:4px;">Extra: ${spendLine}</div>`;
             }
         }
+        if (!inner && cc?.available) {
+            const totalTok = (cc.input_tokens_5h || 0) + (cc.output_tokens_5h || 0);
+            inner += `<div style="font-size:0.78rem;opacity:0.88;line-height:1.5;">Quota live Claude indispo pour l'instant.</div>`;
+            inner += `<div style="font-size:0.76rem;opacity:0.7;margin-top:6px;">Local 5h: ${formatNumber(cc.assistant_messages_5h || 0)} msgs · ${formatNumber(totalTok)} tok</div>`;
+        }
+        const liveMeta = [];
+        if (live?.stale && live.cached_fetched_at) {
+            liveMeta.push(`cache ${formatDateTimeFr(live.cached_fetched_at, { second: '2-digit' })}`);
+        }
+        if (live?.reason && !live.live_available) {
+            liveMeta.push('live indispo');
+        }
+        if (liveMeta.length) {
+            inner += `<div style="font-size:0.72rem;opacity:0.58;margin-top:8px;">${liveMeta.join(' · ')}</div>`;
+        }
         if (inner) {
             html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">Claude Max</div>${inner}</div>`;
         }
     }
 
     // Local telemetry footer
-    const cc = data.claude_code;
     if (cc && cc.available) {
         hasContent = true;
         const parts = [];

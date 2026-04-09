@@ -5,11 +5,14 @@ import re
 import shutil
 import subprocess
 import time
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict
 
 TMUX_SESSION = "claude-usage-scrape"
 WORKING_DIR = "/root/valentina-dashboard"
+CACHE_PATH = Path.home() / ".hermes" / "claude_live_usage_cache.json"
 # Timing
 CLAUDE_STARTUP_WAIT = 4.0
 TRUST_PROMPT_WAIT = 2.0
@@ -20,6 +23,57 @@ CAPTURE_RETRY_DELAY = 1.5
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _load_cached_snapshot() -> Dict[str, Any] | None:
+    try:
+        if not CACHE_PATH.exists():
+            return None
+        data = json.loads(CACHE_PATH.read_text())
+        if not isinstance(data, dict):
+            return None
+        if not data.get("available"):
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def _save_cached_snapshot(payload: Dict[str, Any]) -> None:
+    try:
+        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CACHE_PATH.write_text(json.dumps(payload))
+    except Exception:
+        pass
+
+
+def _with_cache_fallback(fetched_at: str, reason: str, raw_excerpt: str | None) -> Dict[str, Any]:
+    cached = _load_cached_snapshot()
+    if cached:
+        cached_payload = dict(cached)
+        cached_payload.update(
+            {
+                "available": True,
+                "stale": True,
+                "live_available": False,
+                "source": "claude_tui_usage_cache",
+                "fetched_at": fetched_at,
+                "cached_fetched_at": cached.get("fetched_at"),
+                "reason": reason,
+                "raw_excerpt": raw_excerpt,
+            }
+        )
+        return cached_payload
+
+    return {
+        "available": False,
+        "source": "claude_tui_usage",
+        "fetched_at": fetched_at,
+        "reason": reason,
+        "raw_excerpt": raw_excerpt,
+        "stale": False,
+        "live_available": False,
+    }
 
 
 def _run(cmd: list[str], timeout: float = 10.0) -> subprocess.CompletedProcess:
@@ -205,57 +259,38 @@ def scrape_claude_live_usage() -> Dict[str, Any]:
     try:
         err = _ensure_claude_session()
     except (subprocess.TimeoutExpired, OSError) as exc:
-        return {
-            "available": False,
-            "source": "claude_tui_usage",
-            "fetched_at": fetched_at,
-            "reason": f"failed to set up tmux session: {exc}",
-            "raw_excerpt": None,
-        }
+        return _with_cache_fallback(fetched_at, f"failed to set up tmux session: {exc}", None)
 
     if err:
-        return {
-            "available": False,
-            "source": "claude_tui_usage",
-            "fetched_at": fetched_at,
-            "reason": err,
-            "raw_excerpt": None,
-        }
+        return _with_cache_fallback(fetched_at, err, None)
 
     try:
         raw = _send_usage_and_capture()
     except (subprocess.TimeoutExpired, OSError) as exc:
-        return {
-            "available": False,
-            "source": "claude_tui_usage",
-            "fetched_at": fetched_at,
-            "reason": f"failed to capture usage output: {exc}",
-            "raw_excerpt": None,
-        }
+        return _with_cache_fallback(fetched_at, f"failed to capture usage output: {exc}", None)
 
     raw_excerpt = _clean_raw_excerpt(raw)
 
     sections = _parse_usage_output(raw_excerpt)
 
     if not sections:
-        return {
-            "available": False,
-            "source": "claude_tui_usage",
-            "fetched_at": fetched_at,
-            "reason": "could not parse any usage sections from TUI output",
-            "raw_excerpt": raw_excerpt,
-        }
+        return _with_cache_fallback(fetched_at, "could not parse any usage sections from TUI output", raw_excerpt)
 
-    return {
+    payload = {
         "available": True,
         "source": "claude_tui_usage",
         "fetched_at": fetched_at,
+        "cached_fetched_at": fetched_at,
         "raw_excerpt": raw_excerpt,
+        "stale": False,
+        "live_available": True,
         "current_session": sections.get("current_session"),
         "current_week_all_models": sections.get("current_week_all_models"),
         "current_week_sonnet": sections.get("current_week_sonnet"),
         "extra_usage": sections.get("extra_usage"),
     }
+    _save_cached_snapshot(payload)
+    return payload
 
 
 if __name__ == "__main__":
