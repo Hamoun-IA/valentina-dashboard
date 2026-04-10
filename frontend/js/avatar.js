@@ -494,8 +494,251 @@ scene.add(nebula);
 // ────────────────────────────────────────────────────────────────
 let vrm = null;
 let eyeGlowSprites = []; // additive sprite overlays on each eye
+let gestureRig = null;
+let gazeRig = null;
+const gestureEuler = new THREE.Euler();
+const gestureQuat = new THREE.Quaternion();
+const gazeEuler = new THREE.Euler();
+const gazeQuat = new THREE.Quaternion();
 const loader = new GLTFLoader();
 loader.register((parser) => new VRMLoaderPlugin(parser));
+
+function cacheGestureRig() {
+  const humanoid = vrm?.humanoid;
+  if (!humanoid) {
+    gestureRig = null;
+    gazeRig = null;
+    return;
+  }
+
+  const bones = {
+    head: humanoid.getNormalizedBoneNode('head'),
+    neck: humanoid.getNormalizedBoneNode('neck'),
+    chest: humanoid.getNormalizedBoneNode('chest'),
+    spine: humanoid.getNormalizedBoneNode('spine'),
+    leftUpperArm: humanoid.getNormalizedBoneNode('leftUpperArm'),
+    rightUpperArm: humanoid.getNormalizedBoneNode('rightUpperArm'),
+    leftLowerArm: humanoid.getNormalizedBoneNode('leftLowerArm'),
+    rightLowerArm: humanoid.getNormalizedBoneNode('rightLowerArm'),
+    leftHand: humanoid.getNormalizedBoneNode('leftHand'),
+    rightHand: humanoid.getNormalizedBoneNode('rightHand'),
+    leftEye: humanoid.getNormalizedBoneNode('leftEye'),
+    rightEye: humanoid.getNormalizedBoneNode('rightEye'),
+  };
+
+  const restRotations = {};
+  for (const [name, bone] of Object.entries(bones)) {
+    if (bone) restRotations[name] = bone.quaternion.clone();
+  }
+
+  gestureRig = { bones, restRotations };
+  gazeRig = {
+    bones: {
+      leftEye: bones.leftEye || null,
+      rightEye: bones.rightEye || null,
+    },
+    restRotations: {
+      leftEye: restRotations.leftEye || null,
+      rightEye: restRotations.rightEye || null,
+    },
+  };
+}
+
+const GAZE_SETTINGS = {
+  baseYaw: 0,
+  basePitch: -0.003,
+  driftYawAmplitude: 0.028,
+  driftPitchAmplitude: 0.018,
+  driftYawSpeed: 0.18,
+  driftPitchSpeed: 0.14,
+  microIntervalMin: 2.8,
+  microIntervalMax: 6.0,
+  microDurationMin: 0.08,
+  microDurationMax: 0.16,
+  microYawAmplitude: 0.05,
+  microPitchAmplitude: 0.028,
+  followSpeed: 11.0,
+  clampYaw: 0.13,
+  clampPitch: 0.08,
+  speechYawBias: 0.012,
+  speechPitchBias: 0.014,
+  speechBlend: 3.2,
+};
+
+const gazeState = {
+  driftYawPhase: Math.random() * Math.PI * 2,
+  driftPitchPhase: Math.random() * Math.PI * 2,
+  currentYaw: 0,
+  currentPitch: 0,
+  speechYaw: 0,
+  speechPitch: 0,
+  speechYawTarget: 0,
+  speechPitchTarget: 0,
+  microActive: false,
+  microStartAt: 0,
+  microDuration: 0,
+  microYaw: 0,
+  microPitch: 0,
+  nextMicroAt: Number.POSITIVE_INFINITY,
+};
+
+function scheduleNextMicroSaccade() {
+  const range = GAZE_SETTINGS.microIntervalMax - GAZE_SETTINGS.microIntervalMin;
+  gazeState.nextMicroAt = time + GAZE_SETTINGS.microIntervalMin + Math.random() * range;
+}
+
+function seedSpeechGazeBias() {
+  gazeState.speechYawTarget = (Math.random() * 2 - 1) * GAZE_SETTINGS.speechYawBias;
+  gazeState.speechPitchTarget = -Math.abs(Math.random() * GAZE_SETTINGS.speechPitchBias);
+}
+
+function triggerMicroSaccade() {
+  const microRange = GAZE_SETTINGS.microDurationMax - GAZE_SETTINGS.microDurationMin;
+  gazeState.microActive = true;
+  gazeState.microStartAt = time;
+  gazeState.microDuration = GAZE_SETTINGS.microDurationMin + Math.random() * microRange;
+  gazeState.microYaw = (Math.random() * 2 - 1) * GAZE_SETTINGS.microYawAmplitude;
+  gazeState.microPitch = (Math.random() * 2 - 1) * GAZE_SETTINGS.microPitchAmplitude;
+}
+
+function applyEyeOrientation(eyeBone, rest, yaw, pitch) {
+  if (!eyeBone || !rest) return;
+  gazeEuler.set(pitch, yaw, 0, 'XYZ');
+  gazeQuat.setFromEuler(gazeEuler);
+  eyeBone.quaternion.copy(rest).multiply(gazeQuat);
+}
+
+function updateGaze(dt) {
+  if (!gazeRig || (!gazeRig.bones.leftEye && !gazeRig.bones.rightEye)) return;
+
+  if (time >= gazeState.nextMicroAt && !gazeState.microActive) {
+    triggerMicroSaccade();
+    scheduleNextMicroSaccade();
+  }
+
+  const speaking = lipsyncActive ? THREE.MathUtils.clamp(smoothedVolume, 0, 1) : 0;
+  const driftYaw = Math.sin(time * GAZE_SETTINGS.driftYawSpeed + gazeState.driftYawPhase) * GAZE_SETTINGS.driftYawAmplitude;
+  const driftPitch = Math.cos(time * GAZE_SETTINGS.driftPitchSpeed + gazeState.driftPitchPhase) * GAZE_SETTINGS.driftPitchAmplitude;
+
+  let microYaw = 0;
+  let microPitch = 0;
+  if (gazeState.microActive) {
+    const t = (time - gazeState.microStartAt) / Math.max(0.0001, gazeState.microDuration);
+    if (t >= 1) {
+      gazeState.microActive = false;
+      gazeState.microYaw = 0;
+      gazeState.microPitch = 0;
+    } else {
+      const s = Math.sin(Math.PI * t);
+      microYaw = gazeState.microYaw * s * s;
+      microPitch = gazeState.microPitch * s * s;
+    }
+  }
+
+  gazeState.speechYaw = THREE.MathUtils.lerp(
+    gazeState.speechYaw,
+    gazeState.speechYawTarget * speaking,
+    1 - Math.exp(-GAZE_SETTINGS.speechBlend * dt)
+  );
+  gazeState.speechPitch = THREE.MathUtils.lerp(
+    gazeState.speechPitch,
+    gazeState.speechPitchTarget * speaking,
+    1 - Math.exp(-GAZE_SETTINGS.speechBlend * dt)
+  );
+
+  const targetYaw = THREE.MathUtils.clamp(
+    GAZE_SETTINGS.baseYaw + driftYaw + microYaw + gazeState.speechYaw,
+    -GAZE_SETTINGS.clampYaw,
+    GAZE_SETTINGS.clampYaw
+  );
+  const targetPitch = THREE.MathUtils.clamp(
+    GAZE_SETTINGS.basePitch + driftPitch + microPitch + gazeState.speechPitch,
+    -GAZE_SETTINGS.clampPitch,
+    GAZE_SETTINGS.clampPitch
+  );
+
+  const follow = 1 - Math.exp(-GAZE_SETTINGS.followSpeed * dt);
+  gazeState.currentYaw = THREE.MathUtils.lerp(gazeState.currentYaw, targetYaw, follow);
+  gazeState.currentPitch = THREE.MathUtils.lerp(gazeState.currentPitch, targetPitch, follow);
+
+  applyEyeOrientation(gazeRig.bones.leftEye, gazeRig.restRotations.leftEye, gazeState.currentYaw, gazeState.currentPitch);
+  applyEyeOrientation(gazeRig.bones.rightEye, gazeRig.restRotations.rightEye, gazeState.currentYaw, gazeState.currentPitch);
+}
+
+function applyGestureRotation(name, x = 0, y = 0, z = 0) {
+  const bone = gestureRig?.bones?.[name];
+  const rest = gestureRig?.restRotations?.[name];
+  if (!bone || !rest) return;
+
+  gestureEuler.set(x, y, z, 'XYZ');
+  gestureQuat.setFromEuler(gestureEuler);
+  bone.quaternion.copy(rest).multiply(gestureQuat);
+}
+
+function updateGestures(dt, time) {
+  if (!vrm || !gestureRig) return;
+
+  const speaking = lipsyncActive ? 1 : 0;
+  const volume = THREE.MathUtils.clamp(smoothedVolume, 0, 1);
+  const speakAmount = speaking * (0.101 + volume * 0.272);
+  const breathe = Math.sin(time * 0.95);
+  const sway = Math.sin(time * 0.272 + 0.4);
+  const micro = Math.sin(time * 1.0 + 0.8);
+  const talkPulse = Math.sin(time * (1.92 + volume * 1.02));
+  const talkLift = Math.max(0, talkPulse);
+
+  const spineX = 0.0047 + breathe * 0.0031 + speakAmount * (0.0022 + talkLift * 0.003);
+  const spineY = sway * 0.0046 + speakAmount * 0.00235;
+  const spineZ = sway * 0.0018;
+  applyGestureRotation('spine', spineX, spineY, spineZ);
+
+  const chestX = 0.0074 + breathe * 0.0051 + speakAmount * (0.0032 + talkLift * 0.0043);
+  const chestY = sway * 0.0063 + speakAmount * talkPulse * 0.0039;
+  const chestZ = micro * 0.00265 + speakAmount * 0.00375;
+  applyGestureRotation('chest', chestX, chestY, chestZ);
+
+  const neckX = breathe * 0.002 + speakAmount * talkPulse * 0.0035;
+  const neckY = sway * 0.0059 + micro * 0.0024 + speakAmount * 0.0045;
+  const neckZ = Math.sin(time * 0.5 + 1.1) * 0.0029 + speakAmount * 0.003;
+
+  updateHeadAccents(dt);
+  if (lipsyncActive && time >= headAccentState.nextPulseAt) {
+    const speechImpulse = HEAD_ACCENT_SETTINGS.speechPulseMin +
+      Math.random() * (HEAD_ACCENT_SETTINGS.speechPulseMax - HEAD_ACCENT_SETTINGS.speechPulseMin);
+    triggerHeadAccent(speechImpulse);
+    scheduleSpeechHeadAccent();
+  }
+
+  const neckAccentPitch = headAccentState.pitch * HEAD_ACCENT_SETTINGS.neckPitchScale;
+  const neckAccentYaw = headAccentState.yaw * HEAD_ACCENT_SETTINGS.neckYawScale;
+  applyGestureRotation(
+    'neck',
+    neckX + neckAccentPitch,
+    neckY + neckAccentYaw,
+    neckZ + headAccentState.roll * 0.0004
+  );
+
+  const headX = breathe * 0.0029 + speakAmount * (talkPulse * 0.0061 + talkLift * 0.002);
+  const headY = sway * 0.0069 + micro * 0.0028 + speakAmount * 0.0048;
+  const headZ = Math.sin(time * 0.55 + 2.0) * 0.0039 + speakAmount * 0.0037;
+  const headAccentPitch = headAccentState.pitch * HEAD_ACCENT_SETTINGS.headPitchScale;
+  const headAccentYaw = headAccentState.yaw * HEAD_ACCENT_SETTINGS.headYawScale;
+  const headAccentRoll = headAccentState.roll * HEAD_ACCENT_SETTINGS.headRollScale;
+  applyGestureRotation('head', headX + headAccentPitch, headY + headAccentYaw, headZ + headAccentRoll);
+
+  const forearmDrift = Math.sin(time * 0.63 + 2.1) * 0.0034;
+  const handDrift = Math.sin(time * 0.82 + 0.2) * 0.0039;
+  const handSpeak = speakAmount * 0.0034;
+
+  applyGestureRotation('leftUpperArm', breathe * 0.00095, 0, 0);
+  applyGestureRotation('rightUpperArm', breathe * 0.00095, 0, 0);
+
+  applyGestureRotation('leftLowerArm', forearmDrift * 0.12, -forearmDrift * 0.12, handDrift * 0.03);
+  applyGestureRotation('rightLowerArm', forearmDrift * 0.12, forearmDrift * 0.12, -handDrift * 0.03);
+
+  applyGestureRotation('leftHand', handDrift * 0.06, -handDrift * 0.072 - handSpeak, Math.sin(time * 0.9 + 0.4) * 0.0028);
+  applyGestureRotation('rightHand', handDrift * 0.06, handDrift * 0.072 + handSpeak, -Math.sin(time * 0.9 + 0.4) * 0.0028);
+}
 
 loader.load(
   '/assets/models/valentina.vrm',
@@ -525,6 +768,8 @@ loader.load(
         if (rLower) rLower.rotation.y = 0.2;
       }
     } catch (e) { console.warn('Pose adjust failed:', e); }
+
+    cacheGestureRig();
 
     // Eye glow via additive sprites parented to VRM bones.
     // VRM humanoid exposes leftEye/rightEye bones (optional). Fall back to head offsets.
@@ -577,6 +822,8 @@ loader.load(
       console.warn('Eye glow: no head bone found');
     }
 
+    scheduleNextMicroSaccade();
+
     loadingEl.style.display = 'none';
     console.log('VRM loaded:', vrm);
   },
@@ -608,8 +855,270 @@ const visemeCurrent = { Aa: 0, Ih: 0, Ee: 0, Ou: 0, Oh: 0 };
 let jawTarget = 0;
 let jawCurrent = 0;
 
-let blinkTimer = 0;
-let nextBlinkAt = 2 + Math.random() * 3;
+const BLINK_SETTINGS = {
+  intervalMin: 3.1,
+  intervalMax: 7.2,
+  speechIntervalMin: 0.75,
+  speechIntervalMax: 2.2,
+  speechWindow: 1.3,
+  speechDoubleChance: 0.08,
+  doubleBlinkChance: 0.035,
+  closeDuration: 0.082,
+  holdDuration: 0.026,
+  openDuration: 0.095,
+  interBlinkGap: 0.09,
+};
+
+const FACIAL_EXPRESSION_SETTINGS = {
+  relaxedBase: 0.045,
+  relaxedWobble: 0.01,
+  relaxedWobbleSpeed: 0.21,
+  relaxedSmoothing: 6.2,
+  speakingRelaxDip: 0.012,
+  speakingSupportMax: 0.028,
+  speakingSupportLerp: 6.0,
+  speakingPulseSpeed: 1.85,
+  speakingPulseDepth: 0.008,
+  blinkAsymmetryAmount: 0.04,
+  blinkAsymmetrySpeed: 0.35,
+};
+
+const subtleFacialState = {
+  relaxed: 0,
+  speaking: 0,
+  asymPhase: Math.random() * Math.PI * 2,
+};
+
+const FACIAL_EXPRESSION_KEYS = {
+  relaxed: [VRMExpressionPresetName.Relaxed, 'relaxed', 'Relaxed'],
+  speaking: [VRMExpressionPresetName.Fun, 'fun', 'Fun'],
+  blinkLeft: [VRMExpressionPresetName.BlinkLeft, 'blinkLeft', 'BlinkLeft'],
+  blinkRight: [VRMExpressionPresetName.BlinkRight, 'blinkRight', 'BlinkRight'],
+};
+
+const facialExpressionKeyCache = {
+  relaxed: null,
+  speaking: null,
+  blinkLeft: null,
+  blinkRight: null,
+};
+
+function setSafeExpression(expr, kind, rawValue) {
+  const candidates = FACIAL_EXPRESSION_KEYS[kind];
+  if (!expr || !candidates) return;
+  const value = THREE.MathUtils.clamp(rawValue, 0, 1);
+  const cached = facialExpressionKeyCache[kind];
+  if (cached === false) return;
+
+  const trySet = (name) => {
+    expr.setValue(name, value);
+    return true;
+  };
+
+  if (cached) {
+    try {
+      if (trySet(cached)) return;
+    } catch (_error) {
+      facialExpressionKeyCache[kind] = false;
+    }
+  }
+
+  for (const name of candidates) {
+    if (!name) continue;
+    try {
+      if (trySet(name)) {
+        facialExpressionKeyCache[kind] = name;
+        return;
+      }
+    } catch (_error) {}
+  }
+  facialExpressionKeyCache[kind] = false;
+}
+
+function updateBlinkAsymmetry(expr, blinkAmount) {
+  // Disabled for this VRM: BlinkLeft/BlinkRight drive the eyelids far too low
+  // and create a "lashes on the cheeks" artifact. Keep them neutral.
+  setSafeExpression(expr, 'blinkLeft', 0);
+  setSafeExpression(expr, 'blinkRight', 0);
+}
+
+function blinkRandomInterval(isSpeechContext = false) {
+  const min = isSpeechContext ? BLINK_SETTINGS.speechIntervalMin : BLINK_SETTINGS.intervalMin;
+  const max = isSpeechContext ? BLINK_SETTINGS.speechIntervalMax : BLINK_SETTINGS.intervalMax;
+  const skew = (Math.random() + Math.random() + Math.random()) / 3; // soft triangular center
+  return min + (max - min) * skew;
+}
+
+const blinkState = {
+  timer: 0,
+  nextAt: blinkRandomInterval(),
+  phase: 'idle', // idle | close | hold | open | gap
+  phaseTime: 0,
+  phaseDuration: 0,
+  blinksLeft: 0,
+  forceDoubleBlink: false,
+};
+let blinkSpeechWindowUntil = 0;
+let speechEndBlinkBoost = false;
+function setSmoothStep(t) {
+  return t * t * (3 - 2 * t);
+}
+
+function scheduleSpeechBlinkBias() {
+  blinkSpeechWindowUntil = Math.max(blinkSpeechWindowUntil, time + BLINK_SETTINGS.speechWindow);
+  blinkState.nextAt = Math.min(blinkState.nextAt, blinkRandomInterval(true));
+  speechEndBlinkBoost = true;
+  if (Math.random() < BLINK_SETTINGS.speechDoubleChance) {
+    blinkState.forceDoubleBlink = true;
+  }
+}
+
+function startBlinkSequence() {
+  const isInSpeechWindow = time < blinkSpeechWindowUntil;
+  const shouldDouble = blinkState.forceDoubleBlink || (isInSpeechWindow && Math.random() < BLINK_SETTINGS.speechDoubleChance) || Math.random() < BLINK_SETTINGS.doubleBlinkChance;
+  blinkState.forceDoubleBlink = false;
+  blinkState.phase = 'close';
+  blinkState.phaseTime = 0;
+  blinkState.phaseDuration = BLINK_SETTINGS.closeDuration;
+  blinkState.blinksLeft = shouldDouble ? 2 : 1;
+}
+
+function resetBlinkSchedule() {
+  const isInSpeechWindow = time < blinkSpeechWindowUntil;
+  const decayWindow = isInSpeechWindow || speechEndBlinkBoost;
+  blinkState.phase = 'idle';
+  blinkState.phaseTime = 0;
+  blinkState.timer = 0;
+  blinkState.nextAt = blinkRandomInterval(decayWindow);
+  if (time >= blinkSpeechWindowUntil) {
+    speechEndBlinkBoost = false;
+  }
+}
+
+function updateBlink(dt, expr) {
+  let blinkAmount = 0;
+
+  if (blinkState.phase === 'idle') {
+    blinkState.timer += dt;
+    if (blinkState.timer >= blinkState.nextAt) {
+      startBlinkSequence();
+      return updateBlink(dt, expr);
+    }
+  } else if (blinkState.phase === 'close') {
+    blinkState.phaseTime += dt;
+    const t = Math.min(1, blinkState.phaseTime / blinkState.phaseDuration);
+    blinkAmount = setSmoothStep(t);
+    if (t >= 1) {
+      blinkState.phase = 'hold';
+      blinkState.phaseTime = 0;
+      blinkState.phaseDuration = BLINK_SETTINGS.holdDuration;
+    }
+  } else if (blinkState.phase === 'hold') {
+    blinkAmount = 1;
+    blinkState.phaseTime += dt;
+    if (blinkState.phaseTime >= blinkState.phaseDuration) {
+      blinkState.phase = 'open';
+      blinkState.phaseTime = 0;
+      blinkState.phaseDuration = BLINK_SETTINGS.openDuration;
+    }
+  } else if (blinkState.phase === 'open') {
+    blinkState.phaseTime += dt;
+    const t = Math.min(1, blinkState.phaseTime / blinkState.phaseDuration);
+    blinkAmount = 1 - setSmoothStep(t);
+    if (t >= 1) {
+      blinkState.blinksLeft -= 1;
+      if (blinkState.blinksLeft > 0) {
+        blinkState.phase = 'gap';
+        blinkState.phaseTime = 0;
+        blinkState.phaseDuration = BLINK_SETTINGS.interBlinkGap;
+      } else {
+        resetBlinkSchedule();
+      }
+    }
+  } else if (blinkState.phase === 'gap') {
+    blinkState.phaseTime += dt;
+    blinkAmount = 0;
+    if (blinkState.phaseTime >= blinkState.phaseDuration) {
+      blinkState.phase = 'close';
+      blinkState.phaseTime = 0;
+      blinkState.phaseDuration = BLINK_SETTINGS.closeDuration;
+    }
+  }
+
+  expr.setValue(VRMExpressionPresetName.Blink, blinkAmount);
+  updateBlinkAsymmetry(expr, blinkAmount);
+}
+
+function updateSubtleExpressions(dt, expr) {
+  const speaking = lipsyncActive ? 1 : 0;
+  const volume = THREE.MathUtils.clamp(smoothedVolume, 0, 1);
+  const relaxedTarget =
+    FACIAL_EXPRESSION_SETTINGS.relaxedBase
+    + Math.sin(time * FACIAL_EXPRESSION_SETTINGS.relaxedWobbleSpeed) * FACIAL_EXPRESSION_SETTINGS.relaxedWobble
+    - speaking * FACIAL_EXPRESSION_SETTINGS.speakingRelaxDip;
+
+  const relaxedBlend = 1 - Math.exp(-FACIAL_EXPRESSION_SETTINGS.relaxedSmoothing * dt);
+  subtleFacialState.relaxed = THREE.MathUtils.lerp(
+    subtleFacialState.relaxed,
+    THREE.MathUtils.clamp(relaxedTarget, 0, 1),
+    relaxedBlend
+  );
+  setSafeExpression(expr, 'relaxed', subtleFacialState.relaxed);
+
+  const speakingPulse = Math.max(0, Math.sin(time * FACIAL_EXPRESSION_SETTINGS.speakingPulseSpeed));
+  const speakingTarget = speaking * (
+    FACIAL_EXPRESSION_SETTINGS.speakingSupportMax * (0.6 + 0.4 * volume)
+    + speakingPulse * FACIAL_EXPRESSION_SETTINGS.speakingPulseDepth
+  );
+  const speakingBlend = 1 - Math.exp(-FACIAL_EXPRESSION_SETTINGS.speakingSupportLerp * dt);
+  subtleFacialState.speaking = THREE.MathUtils.lerp(
+    subtleFacialState.speaking,
+    THREE.MathUtils.clamp(speakingTarget, 0, FACIAL_EXPRESSION_SETTINGS.speakingSupportMax),
+    speakingBlend
+  );
+  setSafeExpression(expr, 'speaking', subtleFacialState.speaking);
+}
+
+const HEAD_ACCENT_SETTINGS = {
+  startPulse: 0.011,
+  speechPulseMin: 0.0052,
+  speechPulseMax: 0.0082,
+  decay: 8.8,
+  nextMin: 0.8,
+  nextMax: 1.9,
+  headPitchScale: 0.42,
+  headYawScale: 0.28,
+  headRollScale: 0.16,
+  neckPitchScale: 0.24,
+  neckYawScale: 0.21,
+};
+
+const headAccentState = {
+  pitch: 0,
+  yaw: 0,
+  roll: 0,
+  nextPulseAt: Number.POSITIVE_INFINITY,
+};
+
+function updateHeadAccents(dt) {
+  const decay = Math.exp(-HEAD_ACCENT_SETTINGS.decay * dt);
+  headAccentState.pitch *= decay;
+  headAccentState.yaw *= decay;
+  headAccentState.roll *= decay;
+}
+
+function triggerHeadAccent(strength = 0.004) {
+  const signPitch = Math.random() < 0.5 ? -1 : 1;
+  const signYaw = Math.random() < 0.5 ? -1 : 1;
+  const signRoll = Math.random() < 0.5 ? -1 : 1;
+  headAccentState.pitch = THREE.MathUtils.clamp(headAccentState.pitch + signPitch * strength, -0.018, 0.018);
+  headAccentState.yaw = THREE.MathUtils.clamp(headAccentState.yaw + signYaw * strength * 0.7, -0.018, 0.018);
+  headAccentState.roll = THREE.MathUtils.clamp(headAccentState.roll + signRoll * strength * 0.4, -0.015, 0.015);
+}
+
+function scheduleSpeechHeadAccent() {
+  headAccentState.nextPulseAt = time + HEAD_ACCENT_SETTINGS.nextMin + Math.random() * (HEAD_ACCENT_SETTINGS.nextMax - HEAD_ACCENT_SETTINGS.nextMin);
+}
 
 function ensureAudioCtx() {
   if (!audioCtx) {
@@ -688,22 +1197,24 @@ function updateLipsync(dt) {
     jawBone.rotation.x = jawCurrent * 0.35;
   }
 
-  // Idle blink
-  blinkTimer += dt;
-  if (blinkTimer >= nextBlinkAt) {
-    const phase = blinkTimer - nextBlinkAt;
-    if (phase < 0.08) {
-      expr.setValue(VRMExpressionPresetName.Blink, phase / 0.08);
-    } else if (phase < 0.16) {
-      expr.setValue(VRMExpressionPresetName.Blink, 1 - (phase - 0.08) / 0.08);
-    } else {
-      expr.setValue(VRMExpressionPresetName.Blink, 0);
-      blinkTimer = 0;
-      nextBlinkAt = 2 + Math.random() * 4;
-    }
-  }
+  updateBlink(dt, expr);
+  updateSubtleExpressions(dt, expr);
 
   expr.update();
+}
+
+function onSpeechStart() {
+  scheduleSpeechBlinkBias();
+  triggerHeadAccent(HEAD_ACCENT_SETTINGS.startPulse);
+  scheduleSpeechHeadAccent();
+  seedSpeechGazeBias();
+}
+
+function onSpeechEnd() {
+  scheduleSpeechBlinkBias();
+  headAccentState.nextPulseAt = Number.POSITIVE_INFINITY;
+  gazeState.speechYawTarget = 0;
+  gazeState.speechPitchTarget = 0;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -716,17 +1227,13 @@ function animate() {
   const dt = clock.getDelta();
   time += dt;
 
+  updateLipsync(dt);
+
   if (vrm) {
     vrm.update(dt);
-    // Gentle breathing / idle sway
-    const head = vrm.humanoid?.getNormalizedBoneNode('head');
-    if (head) {
-      head.rotation.x = Math.sin(time * 0.8) * 0.02;
-      head.rotation.y = Math.sin(time * 0.5) * 0.04;
-    }
+    updateGestures(dt, time);
+    updateGaze(dt);
   }
-
-  updateLipsync(dt);
   controls.update();
 
   // Ring pulse
@@ -888,6 +1395,7 @@ async function drainAudioQueue() {
 
     lipsyncActive = true;
     currentSource = src;
+    onSpeechStart();
     triggerVoiceAura(); // single shockwave at speech start
     src.onended = () => {
       lipsyncActive = false;
@@ -895,6 +1403,7 @@ async function drainAudioQueue() {
       isPlaying = false;
       visemeTimeline = [];
       timelineIndex = 0;
+      onSpeechEnd();
       setStatus('PRÊTE');
       if (audioQueue.length > 0) drainAudioQueue();
     };

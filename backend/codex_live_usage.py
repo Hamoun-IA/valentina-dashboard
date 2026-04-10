@@ -26,34 +26,133 @@ def _iso_from_epoch(value: Any) -> str | None:
         return None
 
 
+def _normalize_window(window: dict[str, Any] | None) -> dict[str, Any]:
+    if not window:
+        return {}
+    used = window.get("usedPercent")
+    if used is None:
+        used = window.get("used_percent")
+
+    duration = window.get("windowDurationMins")
+    if duration is None and window.get("limit_window_seconds") is not None:
+        try:
+            duration = float(window.get("limit_window_seconds")) / 60.0
+        except (TypeError, ValueError):
+            duration = None
+
+    resets_at = window.get("resetsAt")
+    if resets_at is None:
+        resets_at = window.get("reset_at")
+
+    return {
+        "used_percent": used,
+        "window_minutes": duration,
+        "resets_at": _iso_from_epoch(resets_at),
+    }
+
+
 def _normalize_snapshot(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
     if not snapshot:
         return None
-    primary = snapshot.get("primary") or {}
-    secondary = snapshot.get("secondary") or {}
+    primary = snapshot.get("primary") or snapshot.get("primary_window") or {}
+    secondary = snapshot.get("secondary") or snapshot.get("secondary_window") or {}
     credits = snapshot.get("credits") or {}
 
-    primary_used = primary.get("usedPercent")
-    secondary_used = secondary.get("usedPercent")
+    primary_norm = _normalize_window(primary)
+    secondary_norm = _normalize_window(secondary)
+    primary_used = primary_norm.get("used_percent")
+    secondary_used = secondary_norm.get("used_percent")
 
     return {
-        "limit_id": snapshot.get("limitId"),
-        "limit_name": snapshot.get("limitName"),
-        "plan_type": snapshot.get("planType"),
+        "limit_id": snapshot.get("limitId") or snapshot.get("limit_id") or snapshot.get("metered_feature"),
+        "limit_name": snapshot.get("limitName") or snapshot.get("limit_name") or snapshot.get("metered_feature"),
+        "plan_type": snapshot.get("planType") or snapshot.get("plan_type"),
         "primary_used_percent": primary_used,
         "primary_remaining_percent": (100 - primary_used) if isinstance(primary_used, (int, float)) else None,
-        "primary_window_minutes": primary.get("windowDurationMins"),
-        "primary_resets_at": _iso_from_epoch(primary.get("resetsAt")),
+        "primary_window_minutes": primary_norm.get("window_minutes"),
+        "primary_resets_at": primary_norm.get("resets_at"),
         "secondary_used_percent": secondary_used,
         "secondary_remaining_percent": (100 - secondary_used) if isinstance(secondary_used, (int, float)) else None,
-        "secondary_window_minutes": secondary.get("windowDurationMins"),
-        "secondary_resets_at": _iso_from_epoch(secondary.get("resetsAt")),
+        "secondary_window_minutes": secondary_norm.get("window_minutes"),
+        "secondary_resets_at": secondary_norm.get("resets_at"),
         "credits": {
-            "has_credits": credits.get("hasCredits"),
+            "has_credits": credits.get("hasCredits") if credits.get("hasCredits") is not None else credits.get("has_credits"),
             "unlimited": credits.get("unlimited"),
             "balance": credits.get("balance"),
         } if snapshot.get("credits") is not None else None,
     }
+
+
+def _extract_json_body_from_error(message: str | None) -> dict[str, Any] | None:
+    if not message or "body=" not in message:
+        return None
+    body = message.split("body=", 1)[1].strip()
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        return None
+
+
+def _slugify_limit_key(value: str | None) -> str | None:
+    if not value:
+        return None
+    out = []
+    prev_sep = False
+    for ch in value.lower():
+        if ch.isalnum():
+            out.append(ch)
+            prev_sep = False
+        elif not prev_sep:
+            out.append("_")
+            prev_sep = True
+    return "".join(out).strip("_") or None
+
+
+def _normalize_wham_payload(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not payload:
+        return None
+
+    root_snapshot = {
+        "plan_type": payload.get("plan_type"),
+        "primary_window": (payload.get("rate_limit") or {}).get("primary_window"),
+        "secondary_window": (payload.get("rate_limit") or {}).get("secondary_window"),
+        "credits": payload.get("credits"),
+    }
+    normalized = _normalize_snapshot(root_snapshot) or {}
+    normalized["account_id"] = payload.get("account_id")
+    normalized["user_id"] = payload.get("user_id")
+    normalized["source_format"] = "wham_usage_error_fallback"
+
+    by_limit_id: dict[str, Any] = {}
+    code_review = payload.get("code_review_rate_limit")
+    if code_review:
+        review_norm = _normalize_snapshot({
+            "limit_id": "review",
+            "limit_name": "Code Review",
+            "plan_type": payload.get("plan_type"),
+            "primary_window": code_review.get("primary_window"),
+            "secondary_window": code_review.get("secondary_window"),
+            "credits": payload.get("credits"),
+        })
+        if review_norm:
+            by_limit_id["review"] = review_norm
+
+    for idx, extra in enumerate(payload.get("additional_rate_limits") or [], start=1):
+        key = extra.get("metered_feature") or _slugify_limit_key(extra.get("limit_name")) or f"extra_{idx}"
+        extra_norm = _normalize_snapshot({
+            "limit_id": key,
+            "limit_name": extra.get("limit_name"),
+            "plan_type": payload.get("plan_type"),
+            "primary_window": (extra.get("rate_limit") or {}).get("primary_window"),
+            "secondary_window": (extra.get("rate_limit") or {}).get("secondary_window"),
+            "credits": payload.get("credits"),
+            "metered_feature": extra.get("metered_feature"),
+        })
+        if extra_norm:
+            by_limit_id[key] = extra_norm
+
+    normalized["rate_limits_by_limit_id"] = by_limit_id or None
+    return normalized
 
 
 def get_codex_live_usage() -> dict[str, Any]:
@@ -113,9 +212,19 @@ def get_codex_live_usage() -> dict[str, Any]:
                     obj = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if obj.get("id") == "2" and isinstance(obj.get("result"), dict):
-                    result_obj = obj["result"]
-                    break
+                if obj.get("id") == "2":
+                    if isinstance(obj.get("result"), dict):
+                        result_obj = obj["result"]
+                        break
+                    if isinstance(obj.get("error"), dict):
+                        recovered = _normalize_wham_payload(_extract_json_body_from_error(obj["error"].get("message")))
+                        if recovered is not None:
+                            return {
+                                "available": True,
+                                "source": "codex_app_server_error_fallback",
+                                "fetched_at": fetched_at,
+                                **recovered,
+                            }
             if result_obj is not None:
                 break
 

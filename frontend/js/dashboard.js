@@ -98,6 +98,7 @@ const PROVIDER_META = {
     fal:        { icon: '🎨', color: 'var(--neon-magenta)' },
     runpod:     { icon: '🖥️', color: 'var(--neon-cyan)'    },
     tavily:     { icon: '🔎', color: 'var(--neon-violet)'  },
+    xai:        { icon: '🚀', color: 'var(--neon-magenta)' },
     minimax:    { icon: '🔮', color: 'var(--neon-violet)'  },
     zai:        { icon: '🧠', color: 'var(--neon-cyan)'    },
 };
@@ -125,7 +126,6 @@ function _providerBody(p) {
         let line = `$${bal.toFixed(2)}`;
         if (total > 0) {
             pct = Math.max(0, Math.min(100, (bal / total) * 100));
-            line = `$${bal.toFixed(2)} / $${total.toFixed(2)}`;
         }
         const bar = pct != null
             ? `<div class="provider-bar"><div class="provider-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>`
@@ -137,9 +137,13 @@ function _providerBody(p) {
     if (p.type === 'quota_chars') {
         const used = Number(p.used || 0);
         const limit = Number(p.limit || 0);
+        const remaining = Math.max(0, limit - used);
         const pct = limit > 0 ? (used / limit) * 100 : 0;
         const bar = `<div class="provider-bar"><div class="provider-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>`;
         const note = p.error ? `<div class="provider-sub" style="color:#fbbf24">${p.error}</div>` : '';
+        if (p.id === 'elevenlabs') {
+            return `<div class="provider-metric">${_fmtNum(remaining)}</div>${bar}${note}`;
+        }
         return `<div class="provider-metric">${_fmtNum(used)} / ${_fmtNum(limit)} chars</div>${bar}${note}`;
     }
     if (p.type === 'quota_credits') {
@@ -147,7 +151,11 @@ function _providerBody(p) {
         const limit = p.limit;
         if (limit != null) {
             const pct = limit > 0 ? (used / limit) * 100 : 0;
+            const remaining = Math.max(0, Number(limit) - used);
             const bar = `<div class="provider-bar"><div class="provider-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>`;
+            if (p.id === 'tavily') {
+                return `<div class="provider-metric">${_fmtNum(remaining)}</div>${bar}`;
+            }
             return `<div class="provider-metric">${_fmtNum(used)} / ${_fmtNum(limit)}</div>${bar}`;
         }
         return `<div class="provider-metric">${_fmtNum(used)} used</div>`;
@@ -197,7 +205,9 @@ function _renderProviders(resp) {
         const d = new Date(resp.updated_at);
         updatedEl.textContent = `(${resp.source || ''} · ${d.toLocaleTimeString()})`;
     }
-    grid.innerHTML = resp.providers.map(p => {
+    const hiddenProviders = new Set(['deepseek', 'zai']);
+    const visibleProviders = (resp.providers || []).filter(p => !hiddenProviders.has(p.id));
+    grid.innerHTML = visibleProviders.map(p => {
         const meta = PROVIDER_META[p.id] || { icon: '⚡', color: 'var(--neon-cyan)' };
         const lowClass = _isLow(p) ? 'provider-low' : '';
         const statusClass = `provider-${p.status || 'ok'}`;
@@ -561,6 +571,14 @@ function _subBar(pct, label, extra) {
         </div>`;
 }
 
+function codexPlanLabel(codex) {
+    const plan = String(codex?.plan_type || '').toLowerCase();
+    if (plan === 'pro' || plan === 'prolite') return 'OpenAI Pro / Codex';
+    if (plan === 'plus') return 'OpenAI Plus / Codex';
+    if (plan) return `OpenAI ${plan.toUpperCase()} / Codex`;
+    return 'Codex';
+}
+
 async function loadSubscriptionUsage() {
     const data = await fetchAPI('subscriptions/usage');
     const section = document.getElementById('sub-usage-section');
@@ -570,7 +588,7 @@ async function loadSubscriptionUsage() {
     let hasContent = false;
     let worstPct = 0;
 
-    // Codex Plus (live)
+    // OpenAI / Codex subscription (live)
     const codex = data.codex;
     if (codex && codex.available) {
         hasContent = true;
@@ -585,37 +603,36 @@ async function loadSubscriptionUsage() {
             worstPct = Math.max(worstPct, usedPct);
             inner += _subBar(usedPct, 'Weekly used', codex.secondary_resets_at ? `reset ${formatDateTimeFr(codex.secondary_resets_at)}` : null);
         }
-        const reviewLimit = codex.rate_limits_by_limit_id && (codex.rate_limits_by_limit_id.review || codex.rate_limits_by_limit_id.code_review || codex.rate_limits_by_limit_id.codex_review);
+
+        const extraLimits = codex.rate_limits_by_limit_id || {};
+        const reviewLimit = extraLimits.review || extraLimits.code_review || extraLimits.codex_review;
         if (reviewLimit && reviewLimit.primary_remaining_percent != null) {
-            worstPct = Math.max(worstPct, 100 - reviewLimit.primary_remaining_percent);
-            inner += _subBar(reviewLimit.primary_remaining_percent, 'Revue code', reviewLimit.primary_resets_at ? `reset ${formatDateTimeFr(reviewLimit.primary_resets_at)}` : null);
+            const usedPct = 100 - reviewLimit.primary_remaining_percent;
+            worstPct = Math.max(worstPct, usedPct);
+            inner += _subBar(usedPct, 'Revue code', reviewLimit.primary_resets_at ? `reset ${formatDateTimeFr(reviewLimit.primary_resets_at)}` : null);
         }
+
+        const sparkLimit = extraLimits.codex_bengalfox || Object.values(extraLimits).find(v => String(v?.limit_name || '').toLowerCase().includes('gpt-5.3-codex-spark'));
+        if (sparkLimit) {
+            if (sparkLimit.primary_remaining_percent != null) {
+                const usedPct = 100 - sparkLimit.primary_remaining_percent;
+                worstPct = Math.max(worstPct, usedPct);
+                inner += _subBar(usedPct, 'GPT-5.3-Codex-Spark · 5h used', sparkLimit.primary_resets_at ? `reset ${formatTimeFr(sparkLimit.primary_resets_at)}` : null);
+            }
+            if (sparkLimit.secondary_remaining_percent != null) {
+                const usedPct = 100 - sparkLimit.secondary_remaining_percent;
+                worstPct = Math.max(worstPct, usedPct);
+                inner += _subBar(usedPct, 'GPT-5.3-Codex-Spark · Weekly used', sparkLimit.secondary_resets_at ? `reset ${formatDateTimeFr(sparkLimit.secondary_resets_at)}` : null);
+            }
+        }
+
         if (codex.credits) {
             const balance = codex.credits.balance ?? '—';
             inner += `<div style="font-size:0.78rem;opacity:0.78;margin-top:8px;">Crédits restants: <strong>${balance}</strong></div>`;
         }
         if (inner) {
-            html += `<div class="zai-window" style="flex:1;min-width:240px;"><div class="zai-window-label">Codex Plus</div>${inner}</div>`;
+            html += `<div class="zai-window" style="flex:1;min-width:240px;"><div class="zai-window-label">${codexPlanLabel(codex)}</div>${inner}</div>`;
         }
-    }
-
-    // MiniMax Token Plan (live)
-    const minimax = data.minimax;
-    if (minimax && minimax.available) {
-        hasContent = true;
-        let inner = '';
-        if (minimax.primary_used_percent != null) {
-            worstPct = Math.max(worstPct, minimax.primary_used_percent);
-            inner += _subBar(minimax.primary_used_percent, '5h used', minimax.primary_reset_at ? `reset ${formatTimeFr(minimax.primary_reset_at)}` : null);
-        }
-        if (minimax.secondary_used_percent != null) {
-            worstPct = Math.max(worstPct, minimax.secondary_used_percent);
-            inner += _subBar(minimax.secondary_used_percent, 'Weekly used', minimax.secondary_reset_at ? `reset ${formatDateTimeFr(minimax.secondary_reset_at)}` : null);
-        }
-        if (minimax.model_name) {
-            inner += `<div style="font-size:0.72rem;opacity:0.62;margin-top:8px;">${minimax.model_name}</div>`;
-        }
-        html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">MiniMax</div>${inner}</div>`;
     }
 
     // Z.ai Coding Pro (live)
@@ -644,83 +661,13 @@ async function loadSubscriptionUsage() {
         html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">Z.ai</div>${inner}</div>`;
     }
 
-    // Claude Max (live or cached fallback)
-    const live = data.claude_live;
-    const cc = data.claude_code;
-    if (live && (live.available || cc?.available)) {
-        hasContent = true;
-        let inner = '';
-        if (live?.current_session && live.current_session.used_percent != null) {
-            worstPct = Math.max(worstPct, live.current_session.used_percent);
-            inner += _subBar(live.current_session.used_percent, 'Session', live.current_session.resets_text || null);
-        }
-        if (live?.current_week_all_models && live.current_week_all_models.used_percent != null) {
-            worstPct = Math.max(worstPct, live.current_week_all_models.used_percent);
-            inner += _subBar(live.current_week_all_models.used_percent, 'Week (all)', live.current_week_all_models.resets_text || null);
-        }
-        if (live?.current_week_sonnet && live.current_week_sonnet.used_percent != null) {
-            worstPct = Math.max(worstPct, live.current_week_sonnet.used_percent);
-            inner += _subBar(live.current_week_sonnet.used_percent, 'Week (Sonnet)', live.current_week_sonnet.resets_text || null);
-        }
-        if (live?.extra_usage) {
-            const eu = live.extra_usage;
-            const spendLine = eu.spent_usd != null && eu.limit_usd != null
-                ? `$${eu.spent_usd.toFixed(2)} / $${eu.limit_usd.toFixed(2)}`
-                : null;
-            if (eu.used_percent != null) {
-                inner += _subBar(eu.used_percent, 'Extra usage', spendLine);
-            } else if (spendLine) {
-                inner += `<div style="font-size:0.75rem;opacity:0.7;margin-top:4px;">Extra: ${spendLine}</div>`;
-            }
-        }
-        if (!inner && cc?.available) {
-            const totalTok = (cc.input_tokens_5h || 0) + (cc.output_tokens_5h || 0);
-            inner += `<div style="font-size:0.78rem;opacity:0.88;line-height:1.5;">Quota live Claude indispo pour l'instant.</div>`;
-            inner += `<div style="font-size:0.76rem;opacity:0.7;margin-top:6px;">Local 5h: ${formatNumber(cc.assistant_messages_5h || 0)} msgs · ${formatNumber(totalTok)} tok</div>`;
-        }
-        const liveMeta = [];
-        if (live?.backoff_active) {
-            const retryMins = Math.ceil((live.retry_in_seconds || 0) / 60);
-            const retryTime = live.retry_at ? formatTimeFr(live.retry_at) : '';
-            if (retryMins > 0) {
-                if (retryTime) {
-                    liveMeta.push(`live en pause ${retryMins} min (reprise ${retryTime})`);
-                } else {
-                    liveMeta.push(`live en pause ${retryMins} min`);
-                }
-            } else {
-                liveMeta.push('live en pause');
-            }
-        }
-        if (live?.stale && live.cached_fetched_at && !live.live_available) {
-            liveMeta.push(`cache ${formatDateTimeFr(live.cached_fetched_at, { second: '2-digit' })}`);
-        }
-        if (liveMeta.length) {
-            inner += `<div style="font-size:0.72rem;opacity:0.58;margin-top:8px;">${liveMeta.join(' · ')}</div>`;
-        }
-        if (inner) {
-            html += `<div class="zai-window" style="flex:1;min-width:200px;"><div class="zai-window-label">Claude Max</div>${inner}</div>`;
-        }
-    }
-
-    // Local telemetry footer
-    if (cc && cc.available) {
-        hasContent = true;
-        const parts = [];
-        if (cc.assistant_messages_total) parts.push(`${formatNumber(cc.assistant_messages_total)} msgs`);
-        const totalTok = (cc.input_tokens_total || 0) + (cc.output_tokens_total || 0);
-        if (totalTok) parts.push(`${formatNumber(totalTok)} tok`);
-        if (parts.length) {
-            html += `<div class="zai-footer" style="margin-top:8px;font-size:0.72rem;opacity:0.6;">Local telemetry: ${parts.join(' · ')}</div>`;
-        }
-    }
 
     if (!hasContent) { if (section) section.style.display = 'none'; return; }
     section.style.display = '';
     document.getElementById('sub-usage-body').innerHTML = `<div class="zai-row" style="flex-wrap:wrap;gap:16px;">${html}</div>`;
 
     const updatedAtEl = document.getElementById('sub-updated-at');
-    const updatedAt = data.zai?.fetched_at || data.minimax?.fetched_at || data.claude_live?.fetched_at || data.codex?.fetched_at || data.codex?.last_seen_at || data.claude_code?.last_seen_at;
+    const updatedAt = data.zai?.fetched_at || data.codex?.fetched_at || data.codex?.last_seen_at;
     if (updatedAtEl) {
         updatedAtEl.textContent = updatedAt ? `(updated ${formatDateTimeFr(updatedAt, { second: '2-digit' })})` : '';
     }

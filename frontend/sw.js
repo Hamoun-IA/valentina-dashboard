@@ -1,4 +1,4 @@
-const CACHE_NAME = 'valentina-v2.3';
+const CACHE_NAME = 'valentina-v2.5';
 const STATIC_ASSETS = [
   '/',
   '/voice',

@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from .base import ProviderMonitor
-from .deepseek import DeepSeekMonitor
 from .elevenlabs import ElevenLabsMonitor
 from .fal import FalMonitor
 from .openrouter import OpenRouterMonitor
 from .runpod import RunPodMonitor
 from .tavily import TavilyMonitor
+from .xai import XaiMonitor
 from .zai_proxy import ZaiProxyMonitor
 
 CACHE_TTL_SECONDS = 300  # 5 minutes
@@ -29,12 +29,12 @@ def _now_iso() -> str:
 
 def build_monitors() -> List[ProviderMonitor]:
     return [
-        DeepSeekMonitor(),
         OpenRouterMonitor(),
         ElevenLabsMonitor(),
         FalMonitor(),
         RunPodMonitor(),
         TavilyMonitor(),
+        XaiMonitor(),
         ZaiProxyMonitor(),
     ]
 
@@ -143,12 +143,12 @@ async def get_live_providers(force: bool = False) -> Dict[str, Any]:
 
     # Stable ordering
     order = [
-        "deepseek",
         "openrouter",
         "elevenlabs",
         "fal",
         "runpod",
         "tavily",
+        "xai",
         "zai_proxy",
     ]
     providers.sort(key=lambda p: order.index(p["id"]) if p.get("id") in order else 999)

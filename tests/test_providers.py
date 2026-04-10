@@ -9,7 +9,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.providers.base import ProviderMonitor  # noqa: E402
-from backend.providers.deepseek import DeepSeekMonitor  # noqa: E402
 from backend.providers.elevenlabs import ElevenLabsMonitor  # noqa: E402
 from backend.providers.fal import FalMonitor  # noqa: E402
 from backend.providers.openrouter import OpenRouterMonitor  # noqa: E402
@@ -20,7 +19,6 @@ from backend.providers.live_api import build_monitors, get_live_providers  # noq
 
 
 MONITOR_CLASSES = [
-    DeepSeekMonitor,
     OpenRouterMonitor,
     ElevenLabsMonitor,
     FalMonitor,
